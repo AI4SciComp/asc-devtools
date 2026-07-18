@@ -1,0 +1,7 @@
+[asc]
+organization = "AI4SciComp"
+workspace = "~/projects/AI4SciComp"
+repository_prefix = "asc-"
+include_dot_github = true
+clone_protocol = "ssh"
+

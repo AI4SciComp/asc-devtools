@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use asc-devtools, please cite this software."
+title: "asc-devtools"
+type: software
+authors:
+  - name: "AI4SciComp contributors"
+repository-code: "https://github.com/AI4SciComp/asc-devtools"
+url: "https://github.com/AI4SciComp/asc-devtools"
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-07-19
+

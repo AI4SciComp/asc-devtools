@@ -1,0 +1,23 @@
+# Changelog
+
+This project follows Keep a Changelog and Semantic Versioning.
+
+## [Unreleased]
+
+## [0.1.0] - 2026-07-19
+
+### Added
+
+- Dependency-free Go `asc` binary with JSON configuration and direct GitHub REST
+  discovery.
+- Safe clone, porcelain status, dry-run and fast-forward sync, explicit CMake
+  preset wrappers, structured doctor checks, and Bash completion.
+- Standard-library tests, static builds, and Go 1.25/1.26 CI.
+
+### Changed
+
+- Moved the former Bash implementation to `legacies/shell`; the earlier Python
+  implementation remains under `legacies/python`.
+
+[Unreleased]: https://github.com/AI4SciComp/asc-devtools/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/AI4SciComp/asc-devtools/releases/tag/v0.1.0
