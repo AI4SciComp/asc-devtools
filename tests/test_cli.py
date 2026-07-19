@@ -45,6 +45,7 @@ class CliTest(unittest.TestCase):
             (["--help"], "repo sync"),
             (["--version"], "asc 0.1.0"),
             (["repo", "status", "--help"], "--json"),
+            (["repo", "save", "--help"], "--message"),
             (["completion", "bash"], "complete -F"),
             (["cmake", "--help"], "workflow"),
             (["cmake", "vendor", "--help"], "status|plan|apply"),

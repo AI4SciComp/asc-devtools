@@ -24,9 +24,12 @@ from asc_devtools.github import (
 from asc_devtools.process import CommandRunner
 from asc_devtools.repositories import (
     OperationResult,
+    SavePlan,
+    apply_save_repository,
     clone_repositories,
     inspect_repositories,
     operations_failed,
+    plan_save_repository,
     sync_repositories,
 )
 from asc_devtools.selfupdate import (
@@ -46,7 +49,8 @@ Commands:
   repo list [--json]              List organization repositories
   repo clone [NAME...]            Clone missing repositories
   repo status [NAME...] [--json]  Inspect local repositories
-  repo sync [NAME...] [--dry-run] Fast-forward clean repositories
+  repo sync [NAME...] [--dry-run] Download remote fast-forwards into clean repositories
+  repo save NAME --message TEXT   Commit local changes and push the tracked branch
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
@@ -66,11 +70,12 @@ Global options (must precede COMMAND):
 USAGE = {
     "doctor": "Usage: asc doctor [--json]\n",
     "workspace": "Usage: asc workspace\n",
-    "repo": "Usage: asc repo {list|clone|status|sync} [OPTIONS] [REPOSITORY...]\n",
+    "repo": "Usage: asc repo {list|clone|status|sync|save} [OPTIONS] [REPOSITORY...]\n",
     "repo list": "Usage: asc repo list [--json]\n",
     "repo clone": "Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n",
     "repo status": "Usage: asc repo status [REPOSITORY...] [--json]\n",
     "repo sync": "Usage: asc repo sync [REPOSITORY...] [--dry-run]\n",
+    "repo save": "Usage: asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]\n",
     "update": "Usage: asc update [--check] [--yes] [--prefix PATH]\n",
     "completion": "Usage: asc completion bash\n",
     "configure": "Usage: asc configure REPOSITORY --preset PRESET\n",
@@ -136,6 +141,12 @@ def _parser() -> Parser:
     sync.add_argument("repositories", nargs="*")
     sync.add_argument("--dry-run", action="store_true")
     _help_flag(sync)
+    save = repo_commands.add_parser("save", add_help=False)
+    save.add_argument("repository", nargs="?")
+    save.add_argument("--message", default="")
+    save.add_argument("--dry-run", action="store_true")
+    save.add_argument("--yes", action="store_true")
+    _help_flag(save)
 
     update = commands.add_parser("update", add_help=False)
     update.add_argument("--check", action="store_true")
@@ -237,6 +248,14 @@ def _print_vendor_plan(plan: VendorPlan, output: TextIO) -> None:
     print(f"asc-cmake {plan.version} ({plan.commit}) -> {plan.repository}", file=output)
     for action in plan.actions:
         print(f"  {action.action}\t{action.path}", file=output)
+
+
+def _print_save_plan(plan: SavePlan, output: TextIO) -> None:
+    print(
+        f"{plan.operation.name}: planned: {plan.operation.detail}", file=output
+    )
+    for command in plan.operation.plan:
+        print(f"  {command}", file=output)
 
 
 def main(
@@ -344,6 +363,30 @@ def main(
                 )
                 _print_operations(results, output)
                 return 1 if operations_failed(results) else 0
+            if arguments.repo_command == "save":
+                if not arguments.repository or not arguments.message:
+                    raise UsageError(
+                        "repo save requires one repository and --message"
+                    )
+                save_plan = plan_save_repository(
+                    config, arguments.repository, arguments.message, runner
+                )
+                if arguments.dry_run:
+                    _print_save_plan(save_plan, output)
+                    return 0
+                if not arguments.yes:
+                    _print_save_plan(save_plan, error_output)
+                    print(
+                        "Commit all listed working-tree changes and push? [y/N] ",
+                        end="",
+                        file=error_output,
+                    )
+                    if input_stream.readline().strip().lower() not in {"y", "yes"}:
+                        print("asc: repo save cancelled", file=error_output)
+                        return 1
+                result = apply_save_repository(config, save_plan, runner)
+                _print_operations((result,), output)
+                return 1 if operations_failed((result,)) else 0
             if arguments.repo_command == "status":
                 statuses = inspect_repositories(config, arguments.repositories, runner)
                 if arguments.json:

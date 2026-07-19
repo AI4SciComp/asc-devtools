@@ -79,6 +79,8 @@ asc repo status
 asc repo status --json
 asc repo sync --dry-run
 asc repo sync
+asc repo save asc-cpp --message "Describe the change" --dry-run
+asc repo save asc-cpp --message "Describe the change"
 asc update --check
 asc configure asc-cpp --preset dev
 asc build asc-cpp --preset dev
@@ -99,6 +101,13 @@ The updater downloads `asc-devtools-python.tar.gz` plus `SHA256SUMS`, verifies
 the archive, and runs the same hash-guarded installer used above. It never invokes
 `sudo` itself.
 
+`repo sync` is download-only: it fetches and fast-forwards clean worktrees from
+their upstream branches. `repo save` is upload-only and intentionally operates
+on exactly one repository: it reviews a plan, fetches to detect remote changes,
+stages all local changes, commits with the required message, and pushes the
+tracked branch. It refuses remote-ahead, diverged, detached, conflicted, or
+untracked-branch states.
+
 Global options must precede the command: `--config`, `--organization`,
 `--workspace`, and `--no-color`. See [commands.md](docs/commands.md) for schemas,
 exit codes, and exact external commands.
@@ -111,7 +120,10 @@ exit codes, and exact external commands.
 - Status is local, read-only, nonrecursive, and uses porcelain v2.
 - Sync skips dirty, detached, missing-upstream, wrong-remote, and divergent work.
 - Sync runs only `fetch` and `merge --ff-only`; dry-run runs neither.
-- There is no reset, clean, stash, rebase, checkout, commit, push, or force path.
+- Save requires one repository and an explicit message, supports a read-only
+  plan, prompts by default, and fetches before staging.
+- Outside `repo save`, there is no reset, clean, stash, rebase, checkout, commit,
+  push, or force path.
 - Vendoring is local-only, verifies SHA-256 manifests, refuses modified managed
   files and dirty sources, and preserves unmanaged files.
 - REST requests have time and response-size limits; error bodies are not echoed.

@@ -6,7 +6,8 @@
 - `github.py` owns bounded direct REST requests, pagination, filtering, and the
   optional `gh auth token` fallback.
 - `repositories.py` enforces direct-child containment, remote identity,
-  porcelain-v2 inspection, and fast-forward-only synchronization.
+  porcelain-v2 inspection, download-only fast-forward synchronization, and a
+  reviewed single-repository commit/push save transaction.
 - `commands/cmake.py` plans grouped configure/build/test/workflow commands,
   delegates preset interpretation, and streams exact argument arrays.
 - `vendor.py` owns strict manifests, source validation, SHA-256 state, read-only
@@ -36,3 +37,9 @@ the conservative `LICENSE` plus `modules/**/*.cmake` fallback. The schema-v1
 manifest omits timestamps, sorts slash paths, and hashes exact bytes. Extra files
 are preserved. Replacement/removal requires the old managed bytes to match their
 manifest, and apply writes the new manifest last with rollback of its own work.
+
+Save snapshots porcelain-v2 status during review. Apply rejects a changed
+snapshot, fetches and requires the remote not to be ahead, stages all paths,
+commits only a nonempty index, and pushes the exact upstream branch. It never
+pulls, rebases, forces, changes branches, or resolves conflicts; a failed push
+leaves the local commit intact.

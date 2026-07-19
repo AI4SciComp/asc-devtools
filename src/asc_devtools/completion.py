@@ -7,7 +7,7 @@ BASH_COMPLETION = r"""_asc_completion() {
   current="${COMP_WORDS[COMP_CWORD]}"
   previous="${COMP_WORDS[COMP_CWORD-1]}"
   commands="doctor workspace repo cmake configure build test completion"
-  repo_commands="list clone status sync"
+  repo_commands="list clone status sync save"
   choices="${commands}"
   if [[ "${COMP_WORDS[1]:-}" == "repo" ]]; then
     choices="${repo_commands}"

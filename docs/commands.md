@@ -97,6 +97,7 @@ Failures do not stop later repositories and make the command return `1`.
 
 ## `asc repo sync [REPOSITORY...] [--dry-run]`
 
+Sync is download-only; it never uploads local commits or files.
 Validates a Git worktree, clean status including untracked files, configured
 remote, attached branch, and upstream on that remote. Dry-run prints safely
 quoted planned commands but does not fetch or merge. Real execution uses:
@@ -108,6 +109,20 @@ git -C PATH merge --ff-only UPSTREAM
 
 Outcomes are `planned`, `updated`, `unchanged`, `skipped`, or `failed`. Skips and
 failures return `1` after all independent repositories are processed.
+
+## `asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`
+
+Save is the explicit upload workflow inspired by the `git-save` Make target. It
+operates on exactly one managed direct-child repository and requires a one-line
+commit message. `--dry-run` prints the exact fetch/add/commit/push plan without
+network or filesystem mutation. Without `--yes`, the real command displays that
+plan and asks for confirmation.
+
+Before staging, save rechecks the reviewed status, fetches the remote, and
+refuses detached HEAD, missing/wrong upstream, conflicts, remote-ahead state, and
+divergence. It stages all paths, commits only a nonempty index, then pushes the
+exact tracked branch without force. A clean locally-ahead branch is pushed
+without an empty commit. Failed pushes preserve the local commit.
 
 ## CMake commands
 

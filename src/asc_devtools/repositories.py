@@ -52,6 +52,17 @@ class OperationResult:
     plan: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class SavePlan:
+    operation: OperationResult
+    branch: str
+    upstream: str
+    changes: int
+    message: str
+    path: Path
+    status_output: str
+
+
 def validate_repository_name(name: str, config: Config) -> str:
     if (
         not name
@@ -356,11 +367,199 @@ def sync_repositories(
                 continue
             after = _git(runner, path, "rev-parse", "HEAD")
             results.append(
-                OperationResult(name, "unchanged" if before == after else "updated")
+                OperationResult(
+                    name,
+                    "unchanged" if before == after else "updated",
+                    "already matches upstream"
+                    if before == after
+                    else "downloaded a remote fast-forward",
+                )
             )
         except ProcessError as error:
             results.append(OperationResult(name, "failed", str(error)))
     return tuple(results)
+
+
+def plan_save_repository(
+    config: Config, name: str, message: str, runner: CommandRunner
+) -> SavePlan:
+    """Create a local-only plan for committing and pushing one repository."""
+    message = message.strip()
+    if not message or len(message) > 500 or any(char in message for char in "\0\r\n"):
+        raise RepositoryError(
+            "commit message must be 1-500 characters on one line"
+        )
+    selected = select_local_repositories(config, (name,), runner)
+    if len(selected) != 1 or selected[0][2]:
+        detail = selected[0][2] if selected else "save requires one repository"
+        raise RepositoryError(detail)
+    _, path, _ = selected[0]
+    status_output = runner.run(
+        ["git", "-C", str(path), "status", "--porcelain=v2", "--branch"]
+    ).stdout
+    status = parse_status(name, status_output)
+    if status.detached or not status.branch:
+        raise RepositoryError("detached HEAD cannot be saved safely")
+    if not status.upstream:
+        raise RepositoryError(f"branch {status.branch} has no upstream")
+    remote_prefix = f"{config.remote}/"
+    if not status.upstream.startswith(remote_prefix) or not status.upstream.removeprefix(
+        remote_prefix
+    ):
+        raise RepositoryError(
+            f"upstream does not use configured remote: {status.upstream}"
+        )
+    if any(line.startswith("u ") for line in status_output.splitlines()):
+        raise RepositoryError("repository has unresolved merge conflicts")
+    remote_branch = status.upstream.removeprefix(remote_prefix)
+    fetch = ("git", "-C", str(path), "fetch", "--", config.remote)
+    add = ("git", "-C", str(path), "add", "--all", "--")
+    commit = ("git", "-C", str(path), "commit", "-m", message)
+    push = (
+        "git",
+        "-C",
+        str(path),
+        "push",
+        "--",
+        config.remote,
+        f"HEAD:refs/heads/{remote_branch}",
+    )
+    commands = [shlex.join(fetch)]
+    if not status.clean:
+        commands.extend((shlex.join(add), shlex.join(commit)))
+    commands.append(shlex.join(push))
+    detail = (
+        f"{status.changes} working-tree changes on {status.branch} "
+        f"tracking {status.upstream}"
+    )
+    return SavePlan(
+        OperationResult(name, "planned", detail, tuple(commands)),
+        status.branch,
+        status.upstream,
+        status.changes,
+        message,
+        path,
+        status_output,
+    )
+
+
+def apply_save_repository(
+    config: Config, plan: SavePlan, runner: CommandRunner
+) -> OperationResult:
+    """Verify and execute a previously reviewed save plan."""
+    try:
+        current_status = runner.run(
+            [
+                "git",
+                "-C",
+                str(plan.path),
+                "status",
+                "--porcelain=v2",
+                "--branch",
+            ]
+        ).stdout
+        if current_status != plan.status_output:
+            return OperationResult(
+                plan.operation.name,
+                "failed",
+                "repository changed after the save plan was reviewed",
+            )
+        runner.run(
+            ["git", "-C", str(plan.path), "fetch", "--", config.remote],
+            capture_output=False,
+        )
+        comparison = _git(
+            runner,
+            plan.path,
+            "rev-list",
+            "--left-right",
+            "--count",
+            f"HEAD...{plan.upstream}",
+        ).split()
+        if len(comparison) != 2 or not all(value.isdigit() for value in comparison):
+            return OperationResult(
+                plan.operation.name,
+                "failed",
+                f"invalid upstream comparison: {' '.join(comparison)!r}",
+            )
+        ahead, behind = (int(value) for value in comparison)
+        if behind:
+            detail = (
+                "local and remote histories diverged; resolve manually before saving"
+                if ahead
+                else (
+                    "remote has new commits while local changes exist; preserve "
+                    "and reconcile them manually before saving"
+                    if plan.changes
+                    else "remote has new commits; run asc repo sync first"
+                )
+            )
+            return OperationResult(plan.operation.name, "skipped", detail)
+        committed = False
+        if plan.changes:
+            runner.run(
+                ["git", "-C", str(plan.path), "add", "--all", "--"],
+                capture_output=False,
+            )
+            staged = runner.run(
+                [
+                    "git",
+                    "-C",
+                    str(plan.path),
+                    "diff",
+                    "--cached",
+                    "--quiet",
+                    "--exit-code",
+                ],
+                check=False,
+            )
+            if staged.return_code not in {0, 1}:
+                return OperationResult(
+                    plan.operation.name,
+                    "failed",
+                    f"inspect staged changes failed with {staged.return_code}",
+                )
+            if staged.return_code == 1:
+                runner.run(
+                    [
+                        "git",
+                        "-C",
+                        str(plan.path),
+                        "commit",
+                        "-m",
+                        plan.message,
+                    ],
+                    capture_output=False,
+                )
+                committed = True
+        if not ahead and not committed:
+            return OperationResult(
+                plan.operation.name, "unchanged", "nothing to commit or push"
+            )
+        remote_branch = plan.upstream.removeprefix(f"{config.remote}/")
+        runner.run(
+            [
+                "git",
+                "-C",
+                str(plan.path),
+                "push",
+                "--",
+                config.remote,
+                f"HEAD:refs/heads/{remote_branch}",
+            ],
+            capture_output=False,
+        )
+        detail = (
+            f"committed and pushed to {plan.upstream}"
+            if committed
+            else f"pushed existing local commits to {plan.upstream}"
+        )
+        return OperationResult(plan.operation.name, "saved", detail)
+    except ProcessError as error:
+        detail = str(error)
+        if " push " in f" {detail} ":
+            detail = f"push failed; local commit was preserved: {detail}"
+        return OperationResult(plan.operation.name, "failed", detail)
 
 
 def operations_failed(results: Sequence[OperationResult]) -> bool:

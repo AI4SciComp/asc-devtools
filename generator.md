@@ -659,3 +659,18 @@ and runs the existing hash-guarded installer. It refuses unmanaged or modified
 installations, never invokes `sudo`, supports the normal GitHub token precedence,
 bounds all downloads, and has offline transport-fixture tests. Include a
 deterministic packaging helper and document the release asset contract.
+
+## 23. User-requested repository save extension (2026-07-19)
+
+This section supersedes the earlier prohibition on application commit/push
+functionality only for one explicit command. Add
+`asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`. Keep `repo sync`
+download-only and document that it fetches plus fast-forward merges clean
+worktrees; it never uploads. Save operates on exactly one managed worktree,
+requires a short one-line message, prints an exact plan, and prompts unless
+`--yes`. Before staging, revalidate the reviewed status, fetch the configured
+remote, and refuse detached HEAD, conflicts, missing/wrong upstream, remote-ahead,
+or diverged histories. Then stage all changes, commit only a nonempty index, and
+push the exact tracked branch without force. A clean locally-ahead branch may be
+pushed without an empty commit. Preserve and report a local commit if push fails.
+Add real bare-remote tests. No other command may commit or push.
