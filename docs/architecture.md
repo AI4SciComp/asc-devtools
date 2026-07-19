@@ -7,7 +7,8 @@
 - `github.sh` owns bounded direct REST requests through curl, pagination,
   response parsing, filtering, and stable API records.
 - `repository.sh` enforces direct-child containment, remote identity,
-  porcelain-v2 inspection, and fast-forward-only synchronization.
+  porcelain-v2 inspection, download-only fast-forward synchronization, and a
+  reviewed single-repository commit/push save transaction.
 - `cmake.sh` plans grouped configure/build/test/workflow commands, delegates
   preset interpretation, and invokes exact arrays.
 - `vendor.sh` owns strict manifest/distribution parsing, source validation,
@@ -36,3 +37,9 @@ conservative `LICENSE` plus `modules/**/*.cmake` fallback, and emits a sorted,
 timestamp-free schema-v1 manifest. Extra files are preserved. Replacement or
 removal requires old managed bytes to match their hash. Apply writes the manifest
 last and rolls back changes from the current operation on failure.
+
+Save snapshots porcelain-v2 status during review. Apply rejects a changed
+snapshot, fetches and requires the remote not to be ahead, stages all paths,
+commits only a nonempty index, and pushes the exact upstream branch. It never
+pulls, rebases, forces, changes branches, or resolves conflicts; a failed push
+leaves the local commit intact.

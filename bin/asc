@@ -60,7 +60,8 @@ Commands:
   repo list [--json]              List organization repositories
   repo clone [NAME...]            Clone missing repositories
   repo status [NAME...] [--json]  Inspect local repositories
-  repo sync [NAME...] [--dry-run] Fast-forward clean repositories
+  repo sync [NAME...] [--dry-run] Download remote fast-forwards into clean repositories
+  repo save NAME --message TEXT   Commit local changes and push the tracked branch
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
@@ -418,7 +419,7 @@ asc_main() {
     case "${command}" in
       workspace) printf 'Usage: asc workspace\n' ;;
       doctor) printf 'Usage: asc doctor [--json]\n' ;;
-      repo) printf 'Usage: asc repo {list|clone|status|sync} [OPTIONS] [REPOSITORY...]\n' ;;
+      repo) printf 'Usage: asc repo {list|clone|status|sync|save} [OPTIONS] [REPOSITORY...]\n' ;;
       configure | build | test) printf 'Usage: asc %s REPOSITORY --preset PRESET\n' "${command}" ;;
       cmake) printf 'Usage: asc cmake {configure|build|test|workflow|presets|vendor} ...\n' ;;
       update) printf 'Usage: asc update [--check] [--yes] [--prefix PATH]\n' ;;
@@ -458,7 +459,14 @@ asc_main() {
       local repo_command="$1"
       shift
       if (($# == 1)) && [[ "$1" == -h || "$1" == --help ]]; then
-        printf 'Usage: asc repo %s [OPTIONS] [REPOSITORY...]\n' "${repo_command}"
+        case "${repo_command}" in
+          list) printf 'Usage: asc repo list [--json]\n' ;;
+          clone) printf 'Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n' ;;
+          status) printf 'Usage: asc repo status [REPOSITORY...] [--json]\n' ;;
+          sync) printf 'Usage: asc repo sync [REPOSITORY...] [--dry-run]\n' ;;
+          save) printf 'Usage: asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]\n' ;;
+          *) asc_usage_error "unknown repo command: ${repo_command}"; return ;;
+        esac
         return 0
       fi
       case "${repo_command}" in
@@ -528,6 +536,46 @@ asc_main() {
             shift
           done
           asc_repository_sync "${dry_run}" "${sync_names[@]}"
+          ;;
+        save)
+          local save_repository="" save_message="" save_dry_run=false save_yes=false answer=""
+          while (($# > 0)); do
+            case "$1" in
+              --message)
+                (($# >= 2)) || { asc_usage_error "--message requires a value"; return; }
+                save_message="$2"
+                shift 2
+                ;;
+              --dry-run) save_dry_run=true; shift ;;
+              --yes) save_yes=true; shift ;;
+              -*) asc_usage_error "unknown repo save option: $1"; return ;;
+              *)
+                [[ -z "${save_repository}" ]] || { asc_usage_error "repo save takes one repository"; return; }
+                save_repository="$1"
+                shift
+                ;;
+            esac
+          done
+          [[ -n "${save_repository}" && -n "${save_message}" ]] || {
+            asc_usage_error "repo save requires one repository and --message"
+            return
+          }
+          asc_repository_plan_save "${save_repository}" "${save_message}" || return 1
+          if [[ "${save_dry_run}" == true ]]; then
+            asc_repository_print_save_plan
+            return 0
+          fi
+          if [[ "${save_yes}" != true ]]; then
+            asc_repository_print_save_plan >&2
+            printf 'Commit all listed working-tree changes and push? [y/N] ' >&2
+            IFS= read -r answer || true
+            answer="${answer,,}"
+            if [[ "${answer}" != y && "${answer}" != yes ]]; then
+              printf 'asc: repo save cancelled\n' >&2
+              return 1
+            fi
+          fi
+          asc_repository_apply_save
           ;;
         *)
           asc_usage_error "unknown repo command: ${repo_command}"

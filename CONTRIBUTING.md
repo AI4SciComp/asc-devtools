@@ -17,6 +17,7 @@ Use arrays for commands, quote expansions, and keep repository input as
 validated names. Tests must remain offline and isolated from the user's home,
 Git configuration, live organization, credentials, and workspace. Do not add
 operations that discard work, rewrite history, automatically commit, or push.
+Commit and push are allowed only inside the reviewed `repo save` transaction.
 Vendor tests use only synthetic temporary asc-cmake sources and must never
 inspect or modify a real sibling checkout.
 Self-update tests use only mocked release downloads and temporary managed

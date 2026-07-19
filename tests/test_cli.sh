@@ -22,6 +22,9 @@ test_help_version_completion_and_usage() {
   assert_contains "${CAPTURED_OUTPUT}" "--prefix"
   capture_command "${PROJECT_ROOT}/bin/asc" repo update
   assert_equal 2 "${CAPTURED_STATUS}"
+  capture_command "${PROJECT_ROOT}/bin/asc" repo save --help
+  assert_success "${CAPTURED_STATUS}"
+  assert_contains "${CAPTURED_OUTPUT}" "--message"
   capture_command "${PROJECT_ROOT}/bin/asc" unknown
   assert_equal 2 "${CAPTURED_STATUS}"
 }

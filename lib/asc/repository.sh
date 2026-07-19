@@ -120,6 +120,7 @@ asc_repository_read_status() {
   ASC_STATUS_CLEAN=true
   ASC_STATUS_CHANGES=0
   ASC_STATUS_ERROR=""
+  ASC_STATUS_OUTPUT=""
   if ! asc_validate_repository_name "${name}" >/dev/null 2>&1 || ! asc_is_git_repository "${path}"; then
     ASC_STATUS_CLEAN=false
     ASC_STATUS_ERROR="local Git working tree not found: ${name}"
@@ -130,6 +131,7 @@ asc_repository_read_status() {
     ASC_STATUS_ERROR="git status failed"
     return 1
   fi
+  ASC_STATUS_OUTPUT="${output}"
   while IFS= read -r line; do
     case "${line}" in
       '# branch.head (detached)')
@@ -268,7 +270,13 @@ asc_repository_sync_one() {
     ASC_SYNC_DETAIL="could not read HEAD"
     return
   }
-  [[ "${before}" == "${after}" ]] && ASC_SYNC_OUTCOME=unchanged || ASC_SYNC_OUTCOME=updated
+  if [[ "${before}" == "${after}" ]]; then
+    ASC_SYNC_OUTCOME=unchanged
+    ASC_SYNC_DETAIL="already matches upstream"
+  else
+    ASC_SYNC_OUTCOME=updated
+    ASC_SYNC_DETAIL="downloaded a remote fast-forward"
+  fi
 }
 
 asc_repository_sync() {
@@ -297,4 +305,133 @@ asc_repository_sync() {
   printf 'Summary: failed=%d planned=%d skipped=%d unchanged=%d updated=%d\n' \
     "${failed}" "${planned}" "${skipped}" "${unchanged}" "${updated}"
   ((failed == 0 && skipped == 0))
+}
+
+asc_repository_plan_save() {
+  local name="$1" message="$2"
+  local remote_branch path
+  [[ -n "${message}" && ${#message} -le 500 && "${message}" =~ [^[:space:]] && "${message}" != *$'\n'* && "${message}" != *$'\r'* ]] || {
+    asc_error "commit message must be 1-500 characters on one line"
+    return 1
+  }
+  asc_repository_read_status "${name}" || {
+    asc_error "${ASC_STATUS_ERROR}"
+    return 1
+  }
+  [[ "${ASC_STATUS_DETACHED}" == false && -n "${ASC_STATUS_BRANCH}" ]] || {
+    asc_error "detached HEAD cannot be saved safely"
+    return 1
+  }
+  [[ -n "${ASC_STATUS_UPSTREAM}" ]] || {
+    asc_error "branch ${ASC_STATUS_BRANCH} has no upstream"
+    return 1
+  }
+  [[ "${ASC_STATUS_UPSTREAM}" == "${ASC_REMOTE}/"* && "${ASC_STATUS_UPSTREAM}" != "${ASC_REMOTE}/" ]] || {
+    asc_error "upstream does not use configured remote: ${ASC_STATUS_UPSTREAM}"
+    return 1
+  }
+  if grep -q '^u ' <<<"${ASC_STATUS_OUTPUT}"; then
+    asc_error "repository has unresolved merge conflicts"
+    return 1
+  fi
+  path="${ASC_WORKSPACE}/${name}"
+  remote_branch="${ASC_STATUS_UPSTREAM#${ASC_REMOTE}/}"
+  ASC_SAVE_NAME="${name}"
+  ASC_SAVE_PATH="${path}"
+  ASC_SAVE_BRANCH="${ASC_STATUS_BRANCH}"
+  ASC_SAVE_UPSTREAM="${ASC_STATUS_UPSTREAM}"
+  ASC_SAVE_CHANGES="${ASC_STATUS_CHANGES}"
+  ASC_SAVE_MESSAGE="${message}"
+  ASC_SAVE_STATUS_SNAPSHOT="${ASC_STATUS_OUTPUT}"
+  printf -v ASC_SAVE_FETCH_PLAN '%q ' git -C "${path}" fetch -- "${ASC_REMOTE}"
+  printf -v ASC_SAVE_ADD_PLAN '%q ' git -C "${path}" add --all --
+  printf -v ASC_SAVE_COMMIT_PLAN '%q ' git -C "${path}" commit -m "${message}"
+  printf -v ASC_SAVE_PUSH_PLAN '%q ' git -C "${path}" push -- "${ASC_REMOTE}" "HEAD:refs/heads/${remote_branch}"
+  ASC_SAVE_FETCH_PLAN="${ASC_SAVE_FETCH_PLAN% }"
+  ASC_SAVE_ADD_PLAN="${ASC_SAVE_ADD_PLAN% }"
+  ASC_SAVE_COMMIT_PLAN="${ASC_SAVE_COMMIT_PLAN% }"
+  ASC_SAVE_PUSH_PLAN="${ASC_SAVE_PUSH_PLAN% }"
+}
+
+asc_repository_print_save_plan() {
+  printf '%s: planned: %d working-tree changes on %s tracking %s\n' \
+    "${ASC_SAVE_NAME}" "${ASC_SAVE_CHANGES}" "${ASC_SAVE_BRANCH}" "${ASC_SAVE_UPSTREAM}"
+  printf '  %s\n' "${ASC_SAVE_FETCH_PLAN}"
+  if ((ASC_SAVE_CHANGES > 0)); then
+    printf '  %s\n  %s\n' "${ASC_SAVE_ADD_PLAN}" "${ASC_SAVE_COMMIT_PLAN}"
+  fi
+  printf '  %s\n' "${ASC_SAVE_PUSH_PLAN}"
+}
+
+asc_repository_apply_save() {
+  local comparison ahead behind remote_branch committed=false diff_status
+  asc_repository_read_status "${ASC_SAVE_NAME}" || {
+    printf '%s: failed: could not re-read repository status\n' "${ASC_SAVE_NAME}"
+    return 1
+  }
+  if [[ "${ASC_STATUS_OUTPUT}" != "${ASC_SAVE_STATUS_SNAPSHOT}" ]]; then
+    printf '%s: failed: repository changed after the save plan was reviewed\n' "${ASC_SAVE_NAME}"
+    return 1
+  fi
+  if ! git -C "${ASC_SAVE_PATH}" fetch -- "${ASC_REMOTE}"; then
+    printf '%s: failed: fetch failed\n' "${ASC_SAVE_NAME}"
+    return 1
+  fi
+  if ! comparison=$(git -C "${ASC_SAVE_PATH}" rev-list --left-right --count "HEAD...${ASC_SAVE_UPSTREAM}"); then
+    printf '%s: failed: could not compare upstream\n' "${ASC_SAVE_NAME}"
+    return 1
+  fi
+  read -r ahead behind <<<"${comparison}"
+  [[ "${ahead}" =~ ^[0-9]+$ && "${behind}" =~ ^[0-9]+$ ]] || {
+    printf '%s: failed: invalid upstream comparison\n' "${ASC_SAVE_NAME}"
+    return 1
+  }
+  if ((behind > 0)); then
+    if ((ahead > 0)); then
+      printf '%s: skipped: local and remote histories diverged; resolve manually before saving\n' "${ASC_SAVE_NAME}"
+    elif ((ASC_SAVE_CHANGES > 0)); then
+      printf '%s: skipped: remote has new commits while local changes exist; preserve and reconcile them manually before saving\n' "${ASC_SAVE_NAME}"
+    else
+      printf '%s: skipped: remote has new commits; run asc repo sync first\n' "${ASC_SAVE_NAME}"
+    fi
+    return 1
+  fi
+  if ((ASC_SAVE_CHANGES > 0)); then
+    if ! git -C "${ASC_SAVE_PATH}" add --all --; then
+      printf '%s: failed: stage failed\n' "${ASC_SAVE_NAME}"
+      return 1
+    fi
+    if git -C "${ASC_SAVE_PATH}" diff --cached --quiet --exit-code; then
+      diff_status=0
+    else
+      diff_status=$?
+    fi
+    if ((diff_status > 1)); then
+      printf '%s: failed: could not inspect staged changes\n' "${ASC_SAVE_NAME}"
+      return 1
+    fi
+    if ((diff_status == 1)); then
+      if ! git -C "${ASC_SAVE_PATH}" commit -m "${ASC_SAVE_MESSAGE}"; then
+        printf '%s: failed: commit failed\n' "${ASC_SAVE_NAME}"
+        return 1
+      fi
+      committed=true
+    fi
+  fi
+  if ((ahead == 0)) && [[ "${committed}" == false ]]; then
+    printf '%s: unchanged: nothing to commit or push\n' "${ASC_SAVE_NAME}"
+    printf 'Summary: unchanged=1\n'
+    return 0
+  fi
+  remote_branch="${ASC_SAVE_UPSTREAM#${ASC_REMOTE}/}"
+  if ! git -C "${ASC_SAVE_PATH}" push -- "${ASC_REMOTE}" "HEAD:refs/heads/${remote_branch}"; then
+    printf '%s: failed: push failed; local commit was preserved\n' "${ASC_SAVE_NAME}"
+    return 1
+  fi
+  if [[ "${committed}" == true ]]; then
+    printf '%s: saved: committed and pushed to %s\n' "${ASC_SAVE_NAME}" "${ASC_SAVE_UPSTREAM}"
+  else
+    printf '%s: saved: pushed existing local commits to %s\n' "${ASC_SAVE_NAME}" "${ASC_SAVE_UPSTREAM}"
+  fi
+  printf 'Summary: saved=1\n'
 }
