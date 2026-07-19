@@ -6,7 +6,7 @@ import json
 import os
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from asc_devtools.errors import ConfigurationError
@@ -29,7 +29,18 @@ _FILE_KEYS = {
     "includeDotGitHub",
     "cloneProtocol",
     "remote",
+    "cmake",
 }
+
+_CMAKE_KEYS = {"vendorDirectory", "sourceRepository"}
+
+
+@dataclass(frozen=True)
+class CMakeConfig:
+    """Local asc-cmake vendoring configuration."""
+
+    vendor_directory: str = "cmake/asc"
+    source_repository: str = "asc-cmake"
 
 
 @dataclass(frozen=True)
@@ -53,6 +64,7 @@ class Config:
     remote: str
     github_token: str = ""
     github_token_source: str = ""
+    cmake: CMakeConfig = field(default_factory=CMakeConfig)
 
 
 def _expanded_path(value: str | Path, home: Path, cwd: Path) -> Path:
@@ -104,6 +116,21 @@ def _boolean(document: Mapping[str, object], key: str, default: bool) -> bool:
     return value
 
 
+def _cmake_config(document: Mapping[str, object]) -> CMakeConfig:
+    value = document.get("cmake", {})
+    if not isinstance(value, dict):
+        raise ConfigurationError("cmake must be an object")
+    unknown = set(value) - _CMAKE_KEYS
+    if unknown:
+        raise ConfigurationError(
+            f"unknown cmake configuration field: {sorted(unknown)[0]}"
+        )
+    return CMakeConfig(
+        vendor_directory=_string(value, "vendorDirectory", "cmake/asc"),
+        source_repository=_string(value, "sourceRepository", "asc-cmake"),
+    )
+
+
 def _environment_boolean(environment: Mapping[str, str], default: bool) -> bool:
     value = environment.get("ASC_INCLUDE_DOT_GITHUB")
     if value is None:
@@ -139,6 +166,21 @@ def _validate(config: Config) -> Config:
         raise ConfigurationError("remote must be a simple Git remote name")
     if config.workspace == Path(config.workspace.anchor):
         raise ConfigurationError("workspace must not be a filesystem root")
+    vendor = Path(config.cmake.vendor_directory)
+    if (
+        not config.cmake.vendor_directory
+        or vendor.is_absolute()
+        or vendor == Path(".")
+        or ".." in vendor.parts
+        or "\\" in config.cmake.vendor_directory
+    ):
+        raise ConfigurationError("CMake vendor directory must be a safe relative path")
+    if (
+        not config.cmake.source_repository
+        or config.cmake.source_repository.startswith("-")
+        or not _SIMPLE_PATTERN.fullmatch(config.cmake.source_repository)
+    ):
+        raise ConfigurationError("CMake source repository must be a simple name")
     return config
 
 
@@ -192,6 +234,7 @@ def load_config(
             include_dot_github=include_dot_github,
             clone_protocol=clone_protocol,
             remote=remote,
+            cmake=_cmake_config(document),
             github_token=token,
             github_token_source=token_source,
         )

@@ -4,5 +4,9 @@
   "repositoryPrefix": "asc-",
   "includeDotGitHub": true,
   "cloneProtocol": "ssh",
-  "remote": "origin"
+  "remote": "origin",
+  "cmake": {
+    "vendorDirectory": "cmake/asc",
+    "sourceRepository": "asc-cmake"
+  }
 }

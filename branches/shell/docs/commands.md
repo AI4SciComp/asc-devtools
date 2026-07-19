@@ -43,6 +43,22 @@ JSON schema:
 Prints only the cleaned absolute workspace. It performs no network operation and
 does not require the workspace to exist.
 
+## `asc update [--check] [--yes] [--prefix PATH]`
+
+Queries `GET /repos/AI4SciComp/asc-devtools/releases/latest` and compares its
+numeric release tag with the running version. `--check` reports only; otherwise
+the command asks for confirmation unless `--yes` is supplied. The prefix
+normally comes from the resolved `PREFIX/bin/asc` location; it may instead be
+supplied as an absolute non-root path.
+
+The Shell implementation downloads `asc-devtools-shell.tar.gz` and
+`SHA256SUMS`, requires an exact SHA-256 match, rejects absolute paths, traversal,
+links, devices, control-character names, and unexpected archive roots, then
+invokes the bundled installer. The existing installation manifest must be
+present and the installer independently refuses modified managed files. The
+command does not invoke `sudo`; run it with suitable permissions. A missing
+latest release or required asset is an operational error.
+
 ## `asc repo list [--json]`
 
 Pages through `GET /orgs/ORGANIZATION/repos?type=all&per_page=100&page=N`, then
@@ -81,6 +97,7 @@ Failures do not stop later repositories and make the command return `1`.
 
 ## `asc repo sync [REPOSITORY...] [--dry-run]`
 
+Sync is download-only; it never uploads local commits or files.
 Validates a Git worktree, clean status including untracked files, configured
 remote, attached branch, and upstream on that remote. Dry-run prints safely
 quoted planned commands but does not fetch or merge. Real execution uses:
@@ -93,24 +110,72 @@ git -C PATH merge --ff-only UPSTREAM
 Outcomes are `planned`, `updated`, `unchanged`, `skipped`, or `failed`. Skips and
 failures return `1` after all independent repositories are processed.
 
+## `asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`
+
+Save is the explicit upload workflow inspired by the `git-save` Make target. It
+operates on exactly one managed direct-child repository and requires a one-line
+commit message. `--dry-run` prints the exact fetch/add/commit/push plan without
+network or filesystem mutation. Without `--yes`, the real command displays that
+plan and asks for confirmation.
+
+Before staging, save rechecks the reviewed status, fetches the remote, and
+refuses detached HEAD, missing/wrong upstream, conflicts, remote-ahead state, and
+divergence. It stages all paths, commits only a nonempty index, then pushes the
+exact tracked branch without force. A clean locally-ahead branch is pushed
+without an empty commit. Failed pushes preserve the local commit.
+
 ## CMake commands
 
 ```text
-asc configure REPOSITORY --preset PRESET
-asc build REPOSITORY --preset PRESET
-asc test REPOSITORY --preset PRESET
+asc cmake configure REPOSITORY --preset PRESET
+asc cmake build REPOSITORY --preset PRESET [--target TARGET]...
+asc cmake test REPOSITORY --preset PRESET [--label LABEL] [--output-on-failure]
+asc cmake workflow REPOSITORY \
+  --configure-preset PRESET --build-preset PRESET --test-preset PRESET
+asc cmake presets REPOSITORY [--json]
 ```
 
-A preset is intentionally required; asc never guesses. The repository must have
-`CMakePresets.json` or `CMakeUserPresets.json`. `cmake --list-presets=TYPE`
-validates direct and included presets, then output streams from the repository
-root:
+Legacy top-level configure/build/test remain compatible. Presets are explicit,
+and asc delegates inheritance and conditions to `cmake --list-presets`,
+`cmake --list-presets=build`, and `ctest --list-presets`. Configure/workflow
+require `CMakeLists.txt`. Operations run from a validated direct-child Git
+worktree with exact Bash arrays. Workflow prints each safely rendered array to
+stderr, stops on first failure, and never syncs or vendors implicitly.
+
+## Local asc-cmake vendoring
 
 ```text
-cmake --preset PRESET
-cmake --build --preset PRESET
-ctest --preset PRESET
+asc cmake vendor status REPOSITORY [--json]
+asc cmake vendor plan REPOSITORY [--source PATH] [--ref REF] [--json]
+asc cmake vendor apply REPOSITORY [--source PATH] [--ref REF] [--yes]
 ```
+
+Vendoring copies only from `<workspace>/asc-cmake` or an explicit local source.
+It validates the Git worktree, optional origin, commit/ref, dirtiness,
+containment, and regular nonsymlink files without fetch or checkout. Apply
+refuses dirty sources. Version precedence is `VERSION`, CMake project version,
+then an exact Git tag.
+
+The default target is `cmake/asc`. Strict `distribution.json` enumerates exact
+files; fallback allows `LICENSE` and `modules/**/*.cmake` only.
+`ASC_CMAKE_MANIFEST.json` is deterministic schema-v1 JSON with source, version,
+commit, sorted paths, and SHA-256 hashes; it has no timestamp.
+
+Status values are `not-vendored`, `current`, `source-newer`,
+`locally-modified`, `manifest-invalid`, and `source-unavailable`. Extra files are
+reported and preserved. Plan emits sorted add/replace/preserve/remove actions and
+refuses changed managed bytes. Apply prompts unless `--yes`, recomputes the exact
+plan, stages 0644 files, writes the manifest last, and rolls back its own work on
+failure. It never invokes Git add/commit. Review with `git diff -- cmake/asc`.
+
+Optional strict configuration is:
+
+```json
+{"cmake":{"vendorDirectory":"cmake/asc","sourceRepository":"asc-cmake"}}
+```
+
+Asc orchestrates but does not define CMake policy. Consumers own
+`CMakePresets.json`; configure never modifies vendored modules.
 
 ## `asc completion bash`
 

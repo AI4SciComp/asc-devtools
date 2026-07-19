@@ -3,6 +3,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -47,6 +48,7 @@ func (s Service) Run(ctx context.Context) []Check {
 		toolCheck(ctx, s.Runner, "git", true),
 		toolCheck(ctx, s.Runner, "cmake", false),
 		toolCheck(ctx, s.Runner, "ctest", false),
+		vendorSourceCheck(ctx, s.Runner, s.Config),
 	}
 	if _, err := lookup("gh"); err == nil {
 		checks = append(checks, Check{Name: "gh", Status: "pass", Detail: "optional GitHub CLI is available"})
@@ -72,6 +74,26 @@ func (s Service) Run(ctx context.Context) []Check {
 		checks = append(checks, Check{Name: "path", Status: "warning", Detail: "asc is not available on PATH", Remedy: "install asc under /usr/local/bin"})
 	}
 	return checks
+}
+
+func vendorSourceCheck(ctx context.Context, runner process.Runner, cfg config.Config) Check {
+	sourceName := cfg.CMake.SourceRepository
+	if sourceName == "" {
+		sourceName = "asc-cmake"
+	}
+	path := filepath.Join(cfg.Workspace, sourceName)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return Check{Name: "asc-cmake-source", Status: "warning", Detail: path + " is not checked out", Remedy: "clone asc-cmake before using vendor commands"}
+	}
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return Check{Name: "asc-cmake-source", Status: "warning", Detail: path + " is not a regular directory"}
+	}
+	result, err := runner.Run(ctx, process.Command{Name: "git", Args: []string{"-C", path, "rev-parse", "--is-inside-work-tree"}})
+	if err != nil || strings.TrimSpace(result.Stdout) != "true" {
+		return Check{Name: "asc-cmake-source", Status: "warning", Detail: path + " is not a Git working tree"}
+	}
+	return Check{Name: "asc-cmake-source", Status: "pass", Detail: path + " is available"}
 }
 
 func workspaceCheck(path string) Check {

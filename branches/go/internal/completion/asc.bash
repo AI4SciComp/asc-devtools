@@ -8,16 +8,20 @@ _asc_completion() {
   COMPREPLY=()
 
   if [[ ${COMP_CWORD} -eq 1 ]]; then
-    choices="doctor workspace repo configure build test completion --help --version --config --organization --workspace --no-color"
-  elif [[ ${command} == repo && ${COMP_CWORD} -eq 2 ]]; then
-    choices="list clone status sync"
-  elif [[ ${previous} == --protocol ]]; then
-    choices="ssh https"
-  elif [[ ${previous} == --preset ]]; then
-    choices="dev release"
+    choices="doctor workspace repo cmake configure build test update completion --help --version --config --organization --workspace --no-color"
+	elif [[ ${command} == repo && ${COMP_CWORD} -eq 2 ]]; then
+		choices="list clone status sync save"
+	elif [[ ${command} == cmake && ${COMP_CWORD} -eq 2 ]]; then
+		choices="configure build test workflow presets vendor"
+	elif [[ ${command} == cmake && ${repo_command} == vendor && ${COMP_CWORD} -eq 3 ]]; then
+		choices="status plan apply"
+	elif [[ ${previous} == --protocol ]]; then
+		choices="ssh https"
+	elif [[ ${previous} == --preset || ${previous} == --configure-preset || ${previous} == --build-preset || ${previous} == --test-preset ]]; then
+		choices="dev release"
   elif [[ ${command} == completion ]]; then
     choices="bash"
-  elif [[ ${command} == configure || ${command} == build || ${command} == test || (${command} == repo && ${repo_command} != list) ]]; then
+	elif [[ ${command} == configure || ${command} == build || ${command} == test || ${command} == cmake || (${command} == repo && ${repo_command} != list) ]]; then
     local workspace
     workspace=$(asc workspace 2>/dev/null) || return 0
     [[ -d ${workspace} ]] || return 0

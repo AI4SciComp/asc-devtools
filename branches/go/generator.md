@@ -1,18 +1,77 @@
 # Generator Prompt: Dependency-Free Go `AI4SciComp/asc-devtools`
 
-## Authoritative lifecycle addendum
+## Authoritative v2 upgrade addendum
 
-Generate the maintained command contract represented by the implementation,
-tests, README, and `docs/commands.md`. These requirements override conflicting
-older examples below:
+Upgrade the maintained implementation in place. The existing public commands,
+JSON schemas, exit codes, configuration keys, installer lifecycle, tests, and
+unrelated changes remain compatible. The requirements in this addendum override
+conflicting v0.1 examples below.
 
-- default installation to `/usr/local`, with `--prefix` and `DESTDIR` staging;
-- install a static executable plus completion using a SHA-256 manifest;
-- use `-buildvcs=false`, `-trimpath`, and an explicit release version for
-  reproducible installer builds that do not depend on Git metadata;
-- provide an exact-file, hash-verified uninstaller that never recursively
-  removes an installation prefix;
-- recommend `/usr/local/bin` in diagnostics and installation documentation.
+The current dynamic organization topology is `asc-devtools`, `asc-cmake`,
+`asc-cpp`, `asc-xde`, `asc-kinetic`, `asc-lean`, and `asc-lab`, plus optional
+`.github`. Replace stale documentation examples `asc-pde` and `asc-platform`
+with `asc-xde` and `asc-lab`; never replace arbitrary user data or turn dynamic
+GitHub discovery into a hard-coded list.
+
+Retain legacy top-level `configure`, `build`, and `test` commands and add the
+canonical grouped surface:
+
+```text
+asc cmake configure REPOSITORY --preset PRESET
+asc cmake build REPOSITORY --preset PRESET [--target TARGET...]
+asc cmake test REPOSITORY --preset PRESET [--label LABEL] [--output-on-failure]
+asc cmake workflow REPOSITORY --configure-preset PRESET \
+  --build-preset PRESET --test-preset PRESET
+asc cmake presets REPOSITORY [--json]
+asc cmake vendor status REPOSITORY [--json]
+asc cmake vendor plan REPOSITORY [--source PATH] [--ref REF] [--json]
+asc cmake vendor apply REPOSITORY [--source PATH] [--ref REF] [--yes]
+```
+
+CMake operations run from the validated direct-child repository root and use
+argument slices. Configure/workflow require `CMakeLists.txt`. Delegate preset
+semantics to CMake/CTest list commands. Workflow prints each safe command to
+stderr, stops at the first failed stage, propagates cancellation and exit
+status, and never synchronizes Git or vendors implicitly.
+
+Vendoring is local-only from the checked-out sibling `asc-cmake` (or explicit
+source), never a download. The default destination is `cmake/asc`. Prefer a
+strict `distribution.json`; otherwise allow only regular, nonsymlink
+`modules/**/*.cmake` files and `LICENSE`. Reject escapes and duplicates. Record
+a deterministic, strict schema-v1 `ASC_CMAKE_MANIFEST.json` containing source,
+version, commit, and sorted SHA-256 file records. Version precedence is `VERSION`,
+then the CMake project version, then an exact Git tag. The manifest omits a
+timestamp so identical source produces identical bytes.
+
+Vendor status reports `not-vendored`, `current`, `source-newer`,
+`locally-modified`, `manifest-invalid`, or `source-unavailable`, including
+unmanaged extra files. Plan is read-only and reports add/replace/preserve/remove;
+removal is allowed only for an unchanged file recorded by the old manifest.
+Apply requires the explicit subcommand and confirmation (`--yes` for a
+noninteractive exact plan), revalidates immediately before mutation, refuses a
+dirty or mismatched source and locally modified managed files, stages writes,
+preserves unmanaged files, never deletes the complete `cmake` directory, and
+never runs Git add/commit. Source origin/ref, containment, regular-file status,
+and dirtiness must be validated.
+
+Optional configuration keys are nested under `cmake.vendorDirectory` and
+`cmake.sourceRepository`; defaults are `cmake/asc` and `asc-cmake`. Unknown JSON
+fields remain errors. Doctor adds read-only CMake/CTest version capability and
+local vendoring checks without turning absent optional tooling into unrelated
+fatal failures.
+
+Extend standard-library tests for exact CMake arguments, workflow stop/cancel,
+preset listing, manifest encoding/hashes, strict parsing, paths with spaces,
+source validation, all status classes, safe plans, guarded apply/confirmation,
+and rollback. Tests use only temporary sources/repositories and never touch live
+GitHub or sibling repositories. Update README, command/architecture/installation
+docs, completion, configuration example, changelog, contributing checks, and CI
+to match implemented behavior and the current topology.
+
+Preserve the lifecycle contract: default installation to `/usr/local`, with
+`--prefix` and `DESTDIR`; SHA-256-manifest installation/uninstallation;
+`-buildvcs=false`, `-trimpath`, explicit release version; and exact-file removal
+that never recursively deletes an installation prefix.
 
 You are the principal engineer responsible for implementing the existing GitHub
 repository `AI4SciComp/asc-devtools` as a small, dependable developer CLI.
@@ -74,10 +133,10 @@ unnecessary interfaces, abstractions, reflection, generics, and concurrency.
 AI4SciComp/.github
 AI4SciComp/asc-devtools
 AI4SciComp/asc-cpp
-AI4SciComp/asc-pde
+AI4SciComp/asc-xde
 AI4SciComp/asc-kinetic
 AI4SciComp/asc-lean
-AI4SciComp/asc-platform
+AI4SciComp/asc-lab
 ```
 
 This is developer infrastructure. Do not place LLM orchestration, reinforcement
@@ -650,3 +709,32 @@ At completion, respond with:
 
 Do not claim success for checks that were not actually run. If blocked by the
 environment, report the precise command, failure, and remaining verification.
+
+## 25. User-requested self-update extension (2026-07-19)
+
+This section supersedes the earlier exclusion of release-related functionality
+only where needed for installing a published asc release. Implement a top-level
+`asc update [--check] [--yes] [--prefix PATH]`; it is not an alias for
+`asc repo sync`, and `repo update` must not exist. The command checks the latest
+release in `AI4SciComp/asc-devtools`, selects the Go asset for the running OS and
+architecture, verifies it against the release `SHA256SUMS`, rejects unsafe
+archive contents, and runs the existing hash-guarded installer. It refuses
+unmanaged or modified installations, never invokes `sudo`, supports the normal
+GitHub token precedence, bounds all downloads, and has offline HTTP-fixture
+tests. Include a deterministic packaging helper and document the release asset
+contract.
+
+## 26. User-requested repository save extension (2026-07-19)
+
+This section supersedes the earlier prohibition on application commit/push
+functionality only for one explicit command. Add
+`asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`. Keep `repo sync`
+download-only and document that it fetches plus fast-forward merges clean
+worktrees; it never uploads. Save operates on exactly one managed worktree,
+requires a short one-line message, prints an exact plan, and prompts unless
+`--yes`. Before staging, revalidate the reviewed status, fetch the configured
+remote, and refuse detached HEAD, conflicts, missing/wrong upstream, remote-ahead,
+or diverged histories. Then stage all changes, commit only a nonempty index, and
+push the exact tracked branch without force. A clean locally-ahead branch may be
+pushed without an empty commit. Preserve and report a local commit if push fails.
+Add real bare-remote tests. No other command may commit or push.

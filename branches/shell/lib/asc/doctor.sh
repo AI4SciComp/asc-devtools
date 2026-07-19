@@ -75,6 +75,17 @@ asc_doctor() {
   asc_doctor_tool curl curl true curl --version
   asc_doctor_tool cmake cmake false cmake --version
   asc_doctor_tool ctest ctest false ctest --version
+  local vendor_source="${ASC_WORKSPACE}/${ASC_CMAKE_SOURCE_REPOSITORY}"
+  if [[ ! -e "${vendor_source}" ]]; then
+    asc_doctor_add asc-cmake-source warning "${vendor_source} is not checked out" \
+      "clone asc-cmake before using vendor commands"
+  elif [[ -L "${vendor_source}" || ! -d "${vendor_source}" ]]; then
+    asc_doctor_add asc-cmake-source warning "${vendor_source} is not a regular directory"
+  elif [[ "$(git -C "${vendor_source}" rev-parse --is-inside-work-tree 2>/dev/null || true)" == true ]]; then
+    asc_doctor_add asc-cmake-source pass "${vendor_source} is available"
+  else
+    asc_doctor_add asc-cmake-source warning "${vendor_source} is not a Git worktree"
+  fi
   if command -v gh >/dev/null 2>&1; then
     asc_doctor_add gh pass "optional GitHub CLI is available"
   else

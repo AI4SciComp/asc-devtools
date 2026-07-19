@@ -90,6 +90,45 @@ test_sync_dry_run_and_dirty_refusal() {
   assert_contains "${CAPTURED_OUTPUT}" "working tree is dirty"
 }
 
+test_save_commits_pushes_and_refuses_remote_ahead() {
+  local directory workspace repository seed bare before remote_subject local_subject
+  directory=$(test_case_directory repo_save)
+  setup_sync_case "${directory}"
+  workspace="${directory}/workspace"
+  repository="${workspace}/asc-one"
+  seed="${directory}/seed"
+  bare="${directory}/origin.git"
+  printf 'saved\n' >"${repository}/saved.txt"
+  before=$(git -C "${bare}" rev-parse HEAD)
+  capture_command env HOME="${directory}/home" PATH="${SYSTEM_PATH}" ASC_WORKSPACE="${workspace}" \
+    "${PROJECT_ROOT}/bin/asc" repo save asc-one --message 'Save local work' --dry-run
+  assert_success "${CAPTURED_STATUS}"
+  assert_contains "${CAPTURED_OUTPUT}" "asc-one: planned"
+  assert_contains "${CAPTURED_OUTPUT}" "git -C"
+  assert_contains "${CAPTURED_OUTPUT}" "commit -m Save\\ local\\ work"
+  assert_equal "${before}" "$(git -C "${bare}" rev-parse HEAD)"
+
+  capture_command env HOME="${directory}/home" PATH="${SYSTEM_PATH}" ASC_WORKSPACE="${workspace}" \
+    "${PROJECT_ROOT}/bin/asc" repo save asc-one --message 'Save local work' --yes
+  assert_success "${CAPTURED_STATUS}"
+  assert_contains "${CAPTURED_OUTPUT}" "committed and pushed"
+  remote_subject=$(git -C "${bare}" log -1 --format=%s)
+  assert_equal "Save local work" "${remote_subject}"
+
+  git -C "${seed}" pull -q --ff-only
+  printf 'remote\n' >"${seed}/remote.txt"
+  git -C "${seed}" add remote.txt
+  git -C "${seed}" commit -qm 'remote update'
+  git -C "${seed}" push -q
+  printf 'local\n' >"${repository}/not-saved.txt"
+  capture_command env HOME="${directory}/home" PATH="${SYSTEM_PATH}" ASC_WORKSPACE="${workspace}" \
+    "${PROJECT_ROOT}/bin/asc" repo save asc-one --message 'Must not commit' --yes
+  assert_failure "${CAPTURED_STATUS}"
+  assert_contains "${CAPTURED_OUTPUT}" "reconcile them manually"
+  local_subject=$(git -C "${repository}" log -1 --format=%s)
+  [[ "${local_subject}" != 'Must not commit' ]]
+}
+
 test_symlink_is_not_discovered() {
   local directory workspace
   directory=$(test_case_directory symlink)
@@ -106,5 +145,6 @@ test_symlink_is_not_discovered() {
 run_test "status JSON and partial failure" test_status_json_and_partial_failure
 run_test "clone API URL and absolute destination" test_clone_uses_api_url_and_absolute_destination
 run_test "sync dry-run and dirty refusal" test_sync_dry_run_and_dirty_refusal
+run_test "save commit/push and remote-ahead refusal" test_save_commits_pushes_and_refuses_remote_ahead
 run_test "symlink exclusion" test_symlink_is_not_discovered
 finish_tests

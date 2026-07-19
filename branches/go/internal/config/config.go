@@ -27,24 +27,37 @@ var (
 
 // Config is the fully resolved application configuration.
 type Config struct {
-	ConfigPath        string `json:"configPath"`
-	Organization      string `json:"organization"`
-	Workspace         string `json:"workspace"`
-	RepositoryPrefix  string `json:"repositoryPrefix"`
-	IncludeDotGitHub  bool   `json:"includeDotGitHub"`
-	CloneProtocol     string `json:"cloneProtocol"`
-	Remote            string `json:"remote"`
-	GitHubToken       string `json:"-"`
-	GitHubTokenSource string `json:"-"`
+	ConfigPath        string      `json:"configPath"`
+	Organization      string      `json:"organization"`
+	Workspace         string      `json:"workspace"`
+	RepositoryPrefix  string      `json:"repositoryPrefix"`
+	IncludeDotGitHub  bool        `json:"includeDotGitHub"`
+	CloneProtocol     string      `json:"cloneProtocol"`
+	Remote            string      `json:"remote"`
+	GitHubToken       string      `json:"-"`
+	GitHubTokenSource string      `json:"-"`
+	CMake             CMakeConfig `json:"cmake"`
+}
+
+// CMakeConfig controls local asc-cmake vendoring. Presets remain repository-owned.
+type CMakeConfig struct {
+	VendorDirectory  string `json:"vendorDirectory"`
+	SourceRepository string `json:"sourceRepository"`
 }
 
 type fileConfig struct {
-	Organization     *string `json:"organization"`
-	Workspace        *string `json:"workspace"`
-	RepositoryPrefix *string `json:"repositoryPrefix"`
-	IncludeDotGitHub *bool   `json:"includeDotGitHub"`
-	CloneProtocol    *string `json:"cloneProtocol"`
-	Remote           *string `json:"remote"`
+	Organization     *string          `json:"organization"`
+	Workspace        *string          `json:"workspace"`
+	RepositoryPrefix *string          `json:"repositoryPrefix"`
+	IncludeDotGitHub *bool            `json:"includeDotGitHub"`
+	CloneProtocol    *string          `json:"cloneProtocol"`
+	Remote           *string          `json:"remote"`
+	CMake            *fileCMakeConfig `json:"cmake"`
+}
+
+type fileCMakeConfig struct {
+	VendorDirectory  *string `json:"vendorDirectory"`
+	SourceRepository *string `json:"sourceRepository"`
 }
 
 // Overrides contains configuration values explicitly supplied by the CLI.
@@ -101,6 +114,10 @@ func (l Loader) Load(overrides Overrides) (Config, error) {
 		IncludeDotGitHub: true,
 		CloneProtocol:    defaultCloneProtocol,
 		Remote:           defaultRemote,
+		CMake: CMakeConfig{
+			VendorDirectory:  "cmake/asc",
+			SourceRepository: "asc-cmake",
+		},
 	}
 	applyFile(&values, fileValues)
 	if err := applyEnvironment(&values, l.LookupEnv); err != nil {
@@ -200,6 +217,14 @@ func applyFile(config *Config, values fileConfig) {
 	if values.Remote != nil {
 		config.Remote = *values.Remote
 	}
+	if values.CMake != nil {
+		if values.CMake.VendorDirectory != nil {
+			config.CMake.VendorDirectory = *values.CMake.VendorDirectory
+		}
+		if values.CMake.SourceRepository != nil {
+			config.CMake.SourceRepository = *values.CMake.SourceRepository
+		}
+	}
 }
 
 func applyEnvironment(config *Config, lookup func(string) (string, bool)) error {
@@ -249,9 +274,22 @@ func Validate(config Config) error {
 	if config.Remote == "" || !namePattern.MatchString(config.Remote) || strings.HasPrefix(config.Remote, "-") {
 		return errors.New("remote must be a simple Git remote name")
 	}
+	if err := validateRelativePath(config.CMake.VendorDirectory, "CMake vendor directory"); err != nil {
+		return err
+	}
+	if config.CMake.SourceRepository == "" || config.CMake.SourceRepository == "." || config.CMake.SourceRepository == ".." || !namePattern.MatchString(config.CMake.SourceRepository) || strings.HasPrefix(config.CMake.SourceRepository, "-") {
+		return errors.New("CMake source repository must be a simple repository name")
+	}
 	volume := filepath.VolumeName(config.Workspace)
 	if filepath.Clean(config.Workspace) == volume+string(filepath.Separator) {
 		return errors.New("workspace must not be a filesystem root")
+	}
+	return nil
+}
+
+func validateRelativePath(path, label string) error {
+	if path == "" || filepath.IsAbs(path) || filepath.Clean(path) != path || path == "." || path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%s must be a clean relative path", label)
 	}
 	return nil
 }

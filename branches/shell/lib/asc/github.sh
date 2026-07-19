@@ -162,24 +162,24 @@ asc_github_discover() {
       "${base_url%/}/orgs/${ASC_ORGANIZATION}/repos?type=all&per_page=100&page=${page}"
     )
     if ! status=$(curl "${curl_arguments[@]}"); then
-      rm -rf -- "${temporary_directory}"
+      rm -r -- "${temporary_directory}"
       asc_error "GitHub API request failed"
       return 1
     fi
     if [[ ! "${status}" =~ ^2[0-9][0-9]$ ]]; then
       asc_github_api_error "${status}" "${headers_file}"
-      rm -rf -- "${temporary_directory}"
+      rm -r -- "${temporary_directory}"
       return 1
     fi
     body_size=$(wc -c <"${body_file}")
     if ((body_size > 4194304)); then
-      rm -rf -- "${temporary_directory}"
+      rm -r -- "${temporary_directory}"
       asc_error "GitHub API response exceeded size limit"
       return 1
     fi
     body=$(<"${body_file}")
     if ! records=$(asc_github_parse_response "${body}"); then
-      rm -rf -- "${temporary_directory}"
+      rm -r -- "${temporary_directory}"
       return 1
     fi
     if [[ -n "${records}" ]]; then
@@ -196,7 +196,7 @@ asc_github_discover() {
     ((count > 0)) || break
     ((page += 1))
   done
-  rm -rf -- "${temporary_directory}"
+  rm -r -- "${temporary_directory}"
 
   local record
   local name archived fork clone_url ssh_url default_branch private

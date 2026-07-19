@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
@@ -44,7 +45,11 @@ class CliTest(unittest.TestCase):
             (["--help"], "repo sync"),
             (["--version"], "asc 0.1.0"),
             (["repo", "status", "--help"], "--json"),
+            (["repo", "save", "--help"], "--message"),
             (["completion", "bash"], "complete -F"),
+            (["cmake", "--help"], "workflow"),
+            (["cmake", "vendor", "--help"], "status|plan|apply"),
+            (["update", "--help"], "--check"),
         ):
             with self.subTest(arguments=arguments):
                 output = io.StringIO()
@@ -53,6 +58,26 @@ class CliTest(unittest.TestCase):
         errors = io.StringIO()
         self.assertEqual(main(["build", "asc-cpp"], error_output=errors), 2)
         self.assertIn("--preset", errors.getvalue())
+        errors = io.StringIO()
+        self.assertEqual(main(["repo", "update"], error_output=errors), 2)
+        self.assertIn("invalid choice", errors.getvalue())
+        errors = io.StringIO()
+
+        def missing_release(
+            _url: str, _headers: Mapping[str, str], _limit: int
+        ) -> tuple[int, Mapping[str, str], bytes]:
+            return 404, {}, b""
+
+        with mock.patch.dict(os.environ, {"ASC_GITHUB_TOKEN": "test"}):
+            self.assertEqual(
+                main(
+                    ["update", "--check"],
+                    error_output=errors,
+                    update_transport=missing_release,
+                ),
+                1,
+            )
+        self.assertIn("no published asc release", errors.getvalue())
 
     def test_workspace_is_local_and_resolved(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -16,7 +16,9 @@ relative_targets=(
   lib/asc/repository.sh
   lib/asc/doctor.sh
   lib/asc/cmake.sh
+  lib/asc/vendor.sh
   share/bash-completion/completions/asc
+  lib/asc/update.sh
 )
 
 fail() {
@@ -87,15 +89,15 @@ load_manifest() {
     esac
   done <"${manifest_target}"
   [[ "${manifest_marker}" == v1 && "${manifest_prefix}" == "${prefix}" ]] || fail "invalid manifest"
-  [[ "${manifest_count}" == "${#relative_targets[@]}" ]] || fail "manifest file count mismatch"
-  for index in "${!relative_targets[@]}"; do
+  [[ "${manifest_count}" =~ ^[0-9]+$ && "${manifest_count}" -gt 0 && "${manifest_count}" -le "${#relative_targets[@]}" ]] || fail "manifest file count mismatch"
+  for ((index = 0; index < manifest_count; index++)); do
     [[ "${manifest_hashes[index]:-}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid manifest hash"
   done
 }
 
 verify_existing() {
   local index target actual
-  for index in "${!relative_targets[@]}"; do
+  for ((index = 0; index < manifest_count; index++)); do
     target="${install_root}/${relative_targets[index]}"
     [[ -e "${target}" || -L "${target}" ]] || continue
     [[ -f "${target}" && ! -L "${target}" ]] || fail "refusing non-regular managed path: ${target}"

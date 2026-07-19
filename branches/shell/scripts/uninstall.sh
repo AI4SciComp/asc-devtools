@@ -15,7 +15,9 @@ relative_targets=(
   lib/asc/repository.sh
   lib/asc/doctor.sh
   lib/asc/cmake.sh
+  lib/asc/vendor.sh
   share/bash-completion/completions/asc
+  lib/asc/update.sh
 )
 fail() {
   printf 'uninstall.sh: %s\n' "$*" >&2
@@ -72,8 +74,8 @@ while IFS= read -r line || [[ -n "${line}" ]]; do
   esac
 done <"${manifest_target}"
 [[ "${marker}" == v1 && "${manifest_prefix}" == "${prefix}" ]] || fail "invalid manifest"
-[[ "${count}" == "${#relative_targets[@]}" ]] || fail "manifest file count mismatch"
-for index in "${!relative_targets[@]}"; do
+[[ "${count}" =~ ^[0-9]+$ && "${count}" -gt 0 && "${count}" -le "${#relative_targets[@]}" ]] || fail "manifest file count mismatch"
+for ((index = 0; index < count; index++)); do
   [[ "${hashes[index]:-}" =~ ^[0-9a-f]{64}$ ]] || fail "invalid manifest hash"
   target="${install_root}/${relative_targets[index]}"
   [[ -e "${target}" || -L "${target}" ]] || continue

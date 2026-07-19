@@ -10,9 +10,11 @@ from asc_devtools.config import Config
 from asc_devtools.github import RemoteRepository
 from asc_devtools.process import CommandRunner
 from asc_devtools.repositories import (
+    apply_save_repository,
     clone_repositories,
     discover_local_repositories,
     inspect_repositories,
+    plan_save_repository,
     sync_repositories,
 )
 from tests.support import ScriptedRunner, git, initialize_repository, result
@@ -128,6 +130,48 @@ class RepositoryTest(unittest.TestCase):
             (repository / "dirty").write_text("dirty", encoding="utf-8")
             results = sync_repositories(configuration(workspace), [], CommandRunner())
         self.assertEqual(results[0].outcome, "skipped")
+
+    def test_save_commits_pushes_and_refuses_remote_ahead(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bare = root / "remote.git"
+            seed = root / "seed"
+            workspace = root / "workspace"
+            git(root, "init", "-q", "--bare", str(bare))
+            initialize_repository(seed)
+            git(seed, "remote", "add", "origin", str(bare))
+            git(seed, "push", "-qu", "origin", "HEAD")
+            workspace.mkdir()
+            repository = workspace / "asc-one"
+            git(root, "clone", "-q", str(bare), str(repository))
+            git(repository, "config", "user.name", "Asc Tests")
+            git(repository, "config", "user.email", "asc-tests@example.invalid")
+            (repository / "saved.txt").write_text("saved\n", encoding="utf-8")
+            config = configuration(workspace)
+            runner = CommandRunner()
+            plan = plan_save_repository(
+                config, "asc-one", "Save local work", runner
+            )
+            self.assertEqual(plan.changes, 1)
+            self.assertEqual(len(plan.operation.plan), 4)
+            result = apply_save_repository(config, plan, runner)
+            self.assertEqual(result.outcome, "saved")
+            self.assertIn("committed and pushed", result.detail)
+            self.assertEqual(git(bare, "log", "-1", "--format=%s"), "Save local work")
+
+            git(seed, "pull", "-q", "--ff-only")
+            (seed / "remote.txt").write_text("remote\n", encoding="utf-8")
+            git(seed, "add", "remote.txt")
+            git(seed, "commit", "-qm", "remote update")
+            git(seed, "push", "-q")
+            (repository / "not-saved.txt").write_text("local\n", encoding="utf-8")
+            plan = plan_save_repository(config, "asc-one", "Must not commit", runner)
+            result = apply_save_repository(config, plan, runner)
+            self.assertEqual(result.outcome, "skipped")
+            self.assertIn("reconcile them manually", result.detail)
+            self.assertNotEqual(
+                git(repository, "log", "-1", "--format=%s"), "Must not commit"
+            )
 
 
 if __name__ == "__main__":

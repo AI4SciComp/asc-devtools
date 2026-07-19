@@ -1,9 +1,11 @@
 # Generator Prompt: Python `AI4SciComp/asc-devtools`
 
-## Authoritative parity addendum
+## Authoritative v2 parity addendum
 
-Generate the Python branch with the same observable contract as the Go reference
-on `go`. This addendum overrides conflicting details below:
+Upgrade the Python branch in place with the same observable v2 contract as the
+Go reference on `go`. Preserve existing public commands, JSON schemas, exit
+codes, configuration keys, installation lifecycle, tests, and unrelated changes.
+This addendum overrides conflicting v0.1 details below:
 
 - use strict `~/.config/asc/config.json` with camelCase keys and canonical CLI,
   environment, file, default precedence;
@@ -14,6 +16,41 @@ on `go`. This addendum overrides conflicting details below:
 - require `--preset` and invoke the exact CMake/CTest argument arrays;
 - default installation to `/usr/local` and provide hash-verified uninstall;
 - preserve exit codes 0, 1, and 2 and propagate CMake/CTest codes 1 through 125.
+
+The current dynamic organization topology is `asc-devtools`, `asc-cmake`,
+`asc-cpp`, `asc-xde`, `asc-kinetic`, `asc-lean`, and `asc-lab`, plus optional
+`.github`. Replace stale examples `asc-pde` and `asc-platform`; do not hard-code
+discovery or rewrite arbitrary user data.
+
+Retain legacy top-level configure/build/test and add grouped `asc cmake`
+configure, build (`--target`), test (`--label`, `--output-on-failure`), workflow,
+and presets (`--json`) commands. Delegate preset semantics to CMake/CTest list
+commands. Configure/workflow require `CMakeLists.txt`. Workflow reports each safe
+argument array to stderr, stops on first failure, and never syncs or vendors.
+
+Add local-only `asc cmake vendor status|plan|apply`. Default source is the sibling
+`asc-cmake`; default target is `cmake/asc`. Prefer an exact strict
+`distribution.json`, otherwise allow only nonsymlink `modules/**/*.cmake` and
+`LICENSE`. Use deterministic strict schema-v1 `ASC_CMAKE_MANIFEST.json` with
+source, version, commit, sorted slash paths, and SHA-256 hashes; omit timestamps.
+Version precedence is `VERSION`, CMake project version, then exact Git tag.
+Validate source Git worktree, origin, optional ref, dirtiness, containment, and
+regular files without checkout or network access.
+
+Status values are `not-vendored`, `current`, `source-newer`, `locally-modified`,
+`manifest-invalid`, and `source-unavailable`; report and preserve unmanaged
+extras. Plan is read-only and emits add/replace/preserve/remove, with removal only
+for unchanged previously managed bytes. Apply prompts unless `--yes`, recomputes
+the exact plan, refuses dirty sources and locally modified managed files, stages
+normal-permission writes, writes the manifest last, rolls back its changes on
+failure, and never stages or commits with Git.
+
+Support strict nested `cmake.vendorDirectory` and `cmake.sourceRepository`
+configuration. Doctor adds read-only CMake/CTest capability and sibling source
+checks. Extend standard-library unittest coverage using temporary synthetic Git
+repositories and paths with spaces. Update README, docs, examples, completion,
+changelog, contributing guidance, and CI. Runtime remains Python 3.11+ standard
+library only; no third-party runtime dependencies or `shell=True`.
 
 The maintained implementation, tests, README, and `docs/commands.md` are the
 executable specification when older examples below disagree.
@@ -50,10 +87,10 @@ The organization is expected to contain repositories such as:
 AI4SciComp/.github
 AI4SciComp/asc-devtools
 AI4SciComp/asc-cpp
-AI4SciComp/asc-pde
+AI4SciComp/asc-xde
 AI4SciComp/asc-kinetic
 AI4SciComp/asc-lean
-AI4SciComp/asc-platform
+AI4SciComp/asc-lab
 ```
 
 The tool must help a developer using Ubuntu under WSL2 discover, clone, inspect,
@@ -609,3 +646,31 @@ At completion, report:
 
 Do not include a long diary of implementation steps. Lead with the working result.
 Do not push, commit, or open a pull request unless separately requested.
+
+## 22. User-requested self-update extension (2026-07-19)
+
+This section supersedes the earlier exclusion of release-related functionality
+only where needed for installing a published asc release. Implement a top-level
+`asc update [--check] [--yes] [--prefix PATH]`; it is not an alias for
+`asc repo sync`, and `repo update` must not exist. The command checks the latest
+release in `AI4SciComp/asc-devtools`, selects `asc-devtools-python.tar.gz`,
+verifies it against the release `SHA256SUMS`, rejects unsafe archive contents,
+and runs the existing hash-guarded installer. It refuses unmanaged or modified
+installations, never invokes `sudo`, supports the normal GitHub token precedence,
+bounds all downloads, and has offline transport-fixture tests. Include a
+deterministic packaging helper and document the release asset contract.
+
+## 23. User-requested repository save extension (2026-07-19)
+
+This section supersedes the earlier prohibition on application commit/push
+functionality only for one explicit command. Add
+`asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`. Keep `repo sync`
+download-only and document that it fetches plus fast-forward merges clean
+worktrees; it never uploads. Save operates on exactly one managed worktree,
+requires a short one-line message, prints an exact plan, and prompts unless
+`--yes`. Before staging, revalidate the reviewed status, fetch the configured
+remote, and refuse detached HEAD, conflicts, missing/wrong upstream, remote-ahead,
+or diverged histories. Then stage all changes, commit only a nonempty index, and
+push the exact tracked branch without force. A clean locally-ahead branch may be
+pushed without an empty commit. Preserve and report a local commit if push fails.
+Add real bare-remote tests. No other command may commit or push.
