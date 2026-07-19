@@ -11,7 +11,7 @@ This is developer infrastructure. It does not commit, push, change branches,
 publish releases, orchestrate agents, or implement scientific models.
 
 This branch contains the Go implementation. Equivalent Python and Bash variants
-are maintained on the `implementation/python` and `implementation/shell`
+are maintained on the `impl/python` and `impl/shell`
 branches. The implementation specification is preserved as `generator.md`.
 
 ## Requirements
