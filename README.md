@@ -76,6 +76,38 @@ All installers default to `/usr/local`, accept custom prefix and staging
 options, and maintain manifests so uninstall removes only verified managed
 files. Run the matching `sudo ./scripts/uninstall.sh` to remove an installation.
 
+## GitHub branch workflow
+
+This repository has one combined `main` branch and three standalone branches,
+so use the repository Makefile instead of a generic single-branch save command.
+The workflow requires GNU Make, Bash, Git, rsync, and tar; it never invokes
+GitHub CLI.
+
+```bash
+make github-status
+make github-import
+git diff
+make github-publish
+```
+
+`github-import` requires a clean, up-to-date `main` checkout and copies the
+remote `go`, `python`, and `shell` trees into their matching `branches/*`
+directories for review. It does not commit or push.
+
+`github-publish` stages all intended `main` changes, commits with
+`Updated at YYYY-MM-DD HH:MM:SS` by default, derives standalone commits from the
+committed `branches/*` trees, verifies exact tree equality, and pushes every
+changed branch with one atomic Git push. A rejected branch therefore leaves all
+remote refs unchanged; the local commit remains available to inspect or retry.
+Override the message with:
+
+```bash
+make github-publish MSG="Describe the coordinated update"
+```
+
+Use `make github-check` to require a clean published `main` and exact parity with
+all three standalone branches. `make help` lists the complete workflow.
+
 ## Repository policy
 
 - `main` is the combined source view and runs all implementation test suites.

@@ -8,6 +8,15 @@ permissions:
   contents: read
 
 jobs:
+  repository-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate workflow scripts
+        run: bash -n scripts/github.sh scripts/test_github_workflow.sh
+      - name: Test atomic multi-branch workflow
+        run: ./scripts/test_github_workflow.sh
+
   go:
     runs-on: ubuntu-latest
     defaults:
