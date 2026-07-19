@@ -14,6 +14,23 @@ tests, documentation, installation scripts, and verified uninstall support.
 They share the same command surface, JSON configuration, GitHub REST behavior,
 Git safety rules, CMake/CTest invocation, and exit-code contract.
 
+## Functionality
+
+| Functionality | Commands | Go | Python | Bash |
+| --- | --- | :---: | :---: | :---: |
+| Workspace discovery and diagnostics | `workspace`, `doctor` | Yes | Yes | Yes |
+| GitHub repository discovery | `repo list` | Yes | Yes | Yes |
+| Safe repository cloning | `repo clone` | Yes | Yes | Yes |
+| Local Git status reporting | `repo status` | Yes | Yes | Yes |
+| Fast-forward-only synchronization | `repo sync` | Yes | Yes | Yes |
+| Reviewed commit and push workflow | `repo save` | Yes | Yes | Yes |
+| CMake configure, build, and test | `configure`, `build`, `test` | Yes | Yes | Yes |
+| CMake workflows and preset discovery | `cmake workflow`, `cmake presets` | Yes | Yes | Yes |
+| Guarded CMake module vendoring | `cmake vendor` | Yes | Yes | Yes |
+| Verified self-update | `update` | Yes | Yes | Yes |
+| Bash completion | `completion bash` | Yes | Yes | Yes |
+| Manifest-protected install and uninstall | `scripts/install.sh`, `scripts/uninstall.sh` | Yes | Yes | Yes |
+
 ## Choosing an implementation
 
 Go produces one static executable and is the reference implementation:
@@ -22,6 +39,10 @@ Go produces one static executable and is the reference implementation:
 cd branches/go
 sudo ./scripts/install.sh
 ```
+
+The Go installer searches conventional system locations even when `sudo`
+restricts `PATH`. For a toolchain installed elsewhere, pass it explicitly with
+`sudo ./scripts/install.sh --go "$(command -v go)"`.
 
 Python 3.11+ uses only the standard library at runtime:
 
