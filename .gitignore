@@ -1,0 +1,10 @@
+*.swp
+*~
+.DS_Store
+coverage/
+dist/
+tmp/
+**/__pycache__/
+**/*.egg-info/
+**/.mypy_cache/
+**/.ruff_cache/

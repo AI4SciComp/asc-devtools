@@ -1,0 +1,11 @@
+/asc
+/dist/
+/coverage/
+*.coverprofile
+*.test
+*.out
+.DS_Store
+*.swp
+*~
+
+# Generated artifacts retained only inside historical snapshots.

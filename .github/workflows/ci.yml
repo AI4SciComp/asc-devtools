@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: branches/go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: branches/go/go.mod
+      - name: Format
+        run: test -z "$(find cmd internal -name '*.go' -print0 | xargs -0 gofmt -l)"
+      - name: Verify dependency-free module
+        run: |
+          go mod tidy
+          test ! -e go.sum
+          ! grep -q '^require' go.mod
+          git diff --exit-code -- go.mod
+      - name: Test and vet
+        run: go test ./... && go vet ./...
+      - name: Race test
+        run: go test -race ./...
+      - name: Static build and install lifecycle
+        run: |
+          CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+            -ldflags "-s -w -X main.version=0.1.0" \
+            -o /tmp/asc ./cmd/asc
+          /tmp/asc --version
+          scripts/test_install.sh /tmp/asc
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: branches/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: branches/python/pyproject.toml
+      - name: Install development tools
+        run: python -m pip install '.[dev]'
+      - name: Test
+        run: python -m unittest discover -s tests -v
+      - name: Lint, format, and type check
+        run: |
+          ruff check src tests scripts/manage_install.py
+          ruff format --check src tests scripts/manage_install.py
+          mypy src
+      - name: Compile and install lifecycle
+        run: |
+          python -m compileall -q src tests scripts
+          python -m unittest tests.test_install -v
+
+  shell:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: branches/shell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shell quality tools
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck shfmt
+      - name: Syntax and static checks
+        run: |
+          bash -n bin/asc lib/asc/*.sh completions/asc.bash scripts/*.sh tests/*.sh
+          shellcheck bin/asc lib/asc/*.sh completions/asc.bash scripts/*.sh tests/*.sh
+          shfmt -d -i 2 -ci bin/asc lib/asc/*.sh completions/asc.bash scripts/*.sh tests/*.sh
+      - name: Offline tests
+        run: ./tests/run_tests.sh
