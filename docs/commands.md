@@ -29,7 +29,7 @@ CMake/CTest failures propagate their external exit code when it is between 1 and
 ## `asc doctor [--json]`
 
 Checks configuration, workspace, Git, GitHub REST reachability, API token
-availability, SSH, CMake, CTest, optional `gh`, and whether `asc` is on PATH.
+availability, SSH, CMake, CTest, and whether `asc` is on PATH.
 Checks are `pass`, `warning`, or `failure`. Any failure returns `1`.
 
 JSON schema:
@@ -110,13 +110,14 @@ git -C PATH merge --ff-only UPSTREAM
 Outcomes are `planned`, `updated`, `unchanged`, `skipped`, or `failed`. Skips and
 failures return `1` after all independent repositories are processed.
 
-## `asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`
+## `asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]`
 
 Save is the explicit upload workflow inspired by the `git-save` Make target. It
-operates on exactly one managed direct-child repository and requires a one-line
-commit message. `--dry-run` prints the exact fetch/add/commit/push plan without
-network or filesystem mutation. Without `--yes`, the real command displays that
-plan and asks for confirmation.
+operates on exactly one managed direct-child repository. When `--message` is
+omitted, it uses `Updated at YYYY-MM-DD HH:MM:SS` in local time; an explicit
+one-line message overrides that default. `--dry-run` prints the exact
+fetch/add/commit/push plan without network or filesystem mutation. Without
+`--yes`, the real command displays that plan and asks for confirmation.
 
 Before staging anything, save rechecks the reviewed status, fetches the configured
 remote, and compares `HEAD` with the tracked upstream. It refuses detached HEAD,

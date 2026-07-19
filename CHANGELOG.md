@@ -20,6 +20,10 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- `asc repo save` now defaults to `Updated at YYYY-MM-DD HH:MM:SS` when
+  `--message` is omitted.
+- Removed the GitHub CLI token fallback; API authentication now uses only the
+  documented environment variables.
 - The installer now defaults to the conventional `/usr/local` system prefix and
   supports `DESTDIR` staging.
 - Source installation now discovers Go in conventional system locations when

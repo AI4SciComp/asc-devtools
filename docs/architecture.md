@@ -26,7 +26,7 @@ streams, and defines exit codes.
   plans independently of CLI rendering, then applies an approved plan with
   staged replacements and rollback.
 - `doctor` returns structured, read-only checks for configuration, tools, REST
-  access/authentication, SSH, workspace, optional `gh`, and PATH.
+  access/authentication, SSH, workspace, and PATH.
 - `completion` embeds the static Bash definition printed by the application.
 - `selfupdate` reads bounded release metadata and assets, compares versions,
   verifies SHA-256, extracts only a strict archive root, and delegates replacement

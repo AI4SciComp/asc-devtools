@@ -15,13 +15,16 @@ This branch contains the Go implementation. Equivalent Python and Bash variants
 are maintained on the `python` and `shell`
 branches. The implementation specification is preserved as `generator.md`.
 
-## Requirements
+## Prerequisites
 
-- A release `asc` binary needs only Git for repository commands.
-- CMake and CTest are needed only by their corresponding workflow commands.
-- SSH is needed only for SSH transport and the optional doctor probe.
-- GitHub CLI is optional and used only as a token fallback.
-- Building from source requires Go 1.25 or newer.
+- A released `asc` binary has no language-runtime dependency.
+- Git is required for repository commands.
+- Network access to the GitHub REST API is required for discovery and updates.
+- SSH is required only for SSH clone/push transport and the doctor probe.
+- CMake and CTest are required only by their corresponding workflow commands.
+- Go 1.25 or newer is required only when building from source.
+
+GitHub CLI (`gh`) is neither required nor invoked.
 
 The binary uses only the Go standard library. There are no linked third-party
 modules, and runtime users do not need Go, Python, Node.js, Ruby, jq, or a package
@@ -83,7 +86,6 @@ higher API limits require a token, selected in this order:
 ASC_GITHUB_TOKEN
 GH_TOKEN
 GITHUB_TOKEN
-gh auth token (optional fallback)
 ```
 
 To avoid putting a token in shell history:
@@ -144,7 +146,8 @@ asc repo status
 asc repo status --json
 asc repo sync --dry-run
 asc repo sync
-asc repo save asc-cpp --message "Describe the change" --dry-run
+asc repo save asc-cpp --dry-run
+asc repo save asc-cpp
 asc repo save asc-cpp --message "Describe the change"
 asc update --check
 asc configure asc-cpp --preset dev
@@ -172,9 +175,9 @@ without names process managed Git worktrees that are direct workspace children.
 `repo sync` is download-only: it fetches and fast-forwards clean worktrees from
 their upstream branches. `repo save` is upload-only and intentionally operates
 on exactly one repository: it reviews a plan, fetches to detect remote changes,
-stages all local changes, commits with the required message, and pushes the
-tracked branch. It refuses remote-ahead, diverged, detached, conflicted, or
-untracked-branch states.
+stages all local changes, commits, and pushes the tracked branch. Without
+`--message`, the local-time message is `Updated at YYYY-MM-DD HH:MM:SS`. It
+refuses remote-ahead, diverged, detached, conflicted, or untracked-branch states.
 
 ## Safety guarantees
 
@@ -186,9 +189,9 @@ untracked-branch states.
 - Status is local, read-only, nonrecursive, and uses porcelain-v2 output.
 - Sync skips dirty, detached, no-upstream, wrong-remote, and divergent states.
 - Sync performs only fetch plus `merge --ff-only`; dry-run performs neither.
-- Save requires one repository and an explicit message, supports a read-only
-  plan, prompts by default, fetches before staging, and preserves a local commit
-  if push fails.
+- Save requires one repository, uses a timestamp message by default, supports a
+  read-only plan, prompts by default, fetches before staging, and preserves a
+  local commit if push fails.
 - Outside `repo save`, there is no reset, clean, stash, rebase, checkout, commit,
   push, force operation, telemetry, or credential storage.
 - Vendoring reads only a local `asc-cmake` checkout, verifies exact SHA-256
