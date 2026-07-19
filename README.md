@@ -5,9 +5,9 @@ This repository maintains three behavior-compatible implementations of the
 
 | Implementation | Source directory | Standalone branch |
 | --- | --- | --- |
-| Go | [`branches/go`](branches/go) | `impl/go` |
-| Python | [`branches/python`](branches/python) | `impl/python` |
-| Bash | [`branches/shell`](branches/shell) | `impl/shell` |
+| Go | [`branches/go`](branches/go) | `go` |
+| Python | [`branches/python`](branches/python) | `python` |
+| Bash | [`branches/shell`](branches/shell) | `shell` |
 
 Each implementation contains its own `README.md`, `generator.md`, source,
 tests, documentation, installation scripts, and verified uninstall support.
@@ -44,7 +44,7 @@ files. Run the matching `sudo ./scripts/uninstall.sh` to remove an installation.
 ## Repository policy
 
 - `main` is the combined source view and runs all implementation test suites.
-- `impl/go`, `impl/python`, and `impl/shell` are standalone distributable trees.
+- `go`, `python`, and `shell` are standalone distributable trees.
 - Behavioral changes must be applied to all affected implementations and tested
   from both the standalone branch and the corresponding `branches/*` directory.
 

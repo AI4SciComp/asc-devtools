@@ -1,7 +1,7 @@
 # asc-devtools
 
 This branch provides the Python implementation of `asc`, behaviorally equivalent
-to the Go and Bash variants maintained on `impl/go` and `impl/shell`. Its
+to the Go and Bash variants maintained on `go` and `shell`. Its
 implementation specification is `generator.md`.
 
 `asc` discovers AI4SciComp repositories through the GitHub REST API, clones
