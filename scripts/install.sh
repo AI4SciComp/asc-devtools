@@ -6,15 +6,17 @@ set -o pipefail
 prefix="/usr/local"
 destdir=""
 binary=""
+go_binary=""
 temporary_binary=""
 temporary_completion=""
 temporary_manifest=""
 
 usage() {
 	cat <<'EOF'
-Usage: ./scripts/install.sh [--binary PATH] [--prefix PATH] [--destdir PATH]
+Usage: ./scripts/install.sh [--binary PATH] [--go PATH] [--prefix PATH] [--destdir PATH]
 
 Install asc and its Bash completion. The default prefix is /usr/local.
+When building from source, --go selects the Go executable explicitly.
 EOF
 }
 
@@ -45,6 +47,11 @@ while (($# > 0)); do
 	--binary)
 		(($# >= 2)) || fail "--binary requires a value"
 		binary="$2"
+		shift 2
+		;;
+	--go)
+		(($# >= 2)) || fail "--go requires a value"
+		go_binary="$2"
 		shift 2
 		;;
 	-h | --help)
@@ -119,9 +126,24 @@ fi
 
 project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 if [[ -z "${binary}" ]]; then
-	command -v go >/dev/null 2>&1 || fail "Go is required when --binary is not supplied"
+	if [[ -n "${go_binary}" ]]; then
+		[[ "${go_binary}" == /* ]] || fail "--go must be an absolute path"
+		[[ -f "${go_binary}" && -x "${go_binary}" ]] ||
+			fail "Go executable is not an executable regular file: ${go_binary}"
+	elif go_binary=$(command -v go 2>/dev/null); then
+		:
+	else
+		for candidate in /usr/local/go/bin/go /usr/lib/go/bin/go /snap/bin/go; do
+			if [[ -f "${candidate}" && -x "${candidate}" ]]; then
+				go_binary="${candidate}"
+				break
+			fi
+		done
+	fi
+	[[ -n "${go_binary}" ]] ||
+		fail "Go is required when --binary is not supplied; pass --go PATH if sudo hides it"
 	temporary_binary=$(mktemp "${TMPDIR:-/tmp}/asc-build.XXXXXXXX")
-	(cd -- "${project_root}" && CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+	(cd -- "${project_root}" && CGO_ENABLED=0 "${go_binary}" build -buildvcs=false -trimpath \
 		-ldflags "-s -w -X main.version=0.1.0" -o "${temporary_binary}" ./cmd/asc)
 	binary="${temporary_binary}"
 fi

@@ -22,6 +22,8 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 - The installer now defaults to the conventional `/usr/local` system prefix and
   supports `DESTDIR` staging.
+- Source installation now discovers Go in conventional system locations when
+  `sudo` restricts `PATH`, with `--go PATH` available for other toolchains.
 - Repository examples now use `asc-xde` and `asc-lab`; discovery remains dynamic.
 
 ## [0.1.0] - 2026-07-19

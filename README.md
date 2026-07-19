@@ -41,10 +41,18 @@ The default prefix is `/usr/local`, so the executable is installed at
 `/usr/local/bin/asc` and is normally available on `PATH`. The installer also
 adds Bash completion and a hash manifest used to protect upgrades and removal.
 
-To build and install in one step when root's environment contains Go:
+To build and install in one step, including when `sudo` omits the conventional
+`/usr/local/go/bin` directory from `PATH`:
 
 ```bash
 sudo ./scripts/install.sh
+```
+
+The installer also accepts an explicit Go executable for toolchains installed
+elsewhere:
+
+```bash
+sudo ./scripts/install.sh --go "$(command -v go)"
 ```
 
 Use another system prefix or a packaging staging root explicitly:

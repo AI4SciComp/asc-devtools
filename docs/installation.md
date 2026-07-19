@@ -63,10 +63,18 @@ CGO_ENABLED=0 go build -buildvcs=false -trimpath \
 sudo ./scripts/install.sh --binary ./dist/asc
 ```
 
-The installer can build from the checkout when the invoking environment has Go:
+The installer can build from the checkout directly. It searches `PATH` and
+conventional system locations such as `/usr/local/go/bin/go`, which covers a
+standard Go installation even when `sudo` uses a restricted `PATH`:
 
 ```bash
 sudo ./scripts/install.sh
+```
+
+For a toolchain installed elsewhere, pass its absolute path explicitly:
+
+```bash
+sudo ./scripts/install.sh --go "$(command -v go)"
 ```
 
 Building before `sudo` is recommended because it uses the developer's selected

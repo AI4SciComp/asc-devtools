@@ -26,6 +26,21 @@ install_root="${test_root}${prefix}"
 install_script="${project_root}/scripts/install.sh"
 uninstall_script="${project_root}/scripts/uninstall.sh"
 
+# An explicit Go path supports source builds when sudo or packaging strips PATH.
+go_executable=$(command -v go)
+PATH=/usr/bin:/bin "${install_script}" --go "${go_executable}" \
+	--prefix "${prefix}" --destdir "${test_root}" >/dev/null
+"${install_root}/bin/asc" --version >/dev/null
+"${uninstall_script}" --prefix "${prefix}" --destdir "${test_root}" >/dev/null
+
+# A conventional /usr/local Go installation remains discoverable outside PATH.
+if [[ -x /usr/local/go/bin/go ]]; then
+	PATH=/usr/bin:/bin "${install_script}" \
+		--prefix "${prefix}" --destdir "${test_root}" >/dev/null
+	"${install_root}/bin/asc" --version >/dev/null
+	"${uninstall_script}" --prefix "${prefix}" --destdir "${test_root}" >/dev/null
+fi
+
 "${install_script}" --binary "${binary}" --prefix "${prefix}" --destdir "${test_root}"
 "${install_root}/bin/asc" --help >/dev/null
 bash -n "${install_root}/share/bash-completion/completions/asc"
