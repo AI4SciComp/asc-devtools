@@ -9,7 +9,7 @@ Versioning.
 
 - Matched the Go command, JSON configuration, direct REST, Git safety, required
   preset, diagnostics, completion, and exit-code contracts.
-- Published this implementation independently on `implementation/shell`.
+- Published this implementation independently on `impl/shell`.
 
 ### Added
 

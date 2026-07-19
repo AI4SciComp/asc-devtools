@@ -3,7 +3,7 @@
 ## Authoritative parity addendum
 
 Generate the Bash branch with the same observable contract as the Go reference
-on `implementation/go`. This addendum overrides conflicting details below:
+on `impl/go`. This addendum overrides conflicting details below:
 
 - use strict `~/.config/asc/config.json` with camelCase keys and canonical CLI,
   environment, file, default precedence;
