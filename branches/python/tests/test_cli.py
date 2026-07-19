@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
-from asc_devtools.cli import main
+from asc_devtools.cli import _save_message, main
 from asc_devtools.github import GitHubClient
 from asc_devtools.process import CommandRunner
 from tests.support import initialize_repository
@@ -40,6 +40,13 @@ def client_factory(_token: str) -> GitHubClient:
 
 
 class CliTest(unittest.TestCase):
+    def test_default_save_message_uses_local_update_time(self) -> None:
+        self.assertRegex(
+            _save_message(""),
+            r"^Updated at \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$",
+        )
+        self.assertEqual(_save_message("Describe the change"), "Describe the change")
+
     def test_help_version_completion_and_usage_exit(self) -> None:
         for arguments, expected in (
             (["--help"], "repo sync"),

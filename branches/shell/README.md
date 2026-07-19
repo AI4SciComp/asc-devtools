@@ -8,15 +8,15 @@ implementation specification is `generator.md`.
 missing worktrees, reports Git state, performs conservative fast-forward-only
 updates, and invokes repository-owned CMake presets.
 
-## Requirements
+## Prerequisites
 
 - Bash 4.4 or newer on Ubuntu or WSL2
 - Git and curl for repository and GitHub operations
 - CMake and CTest for their corresponding workflow commands
 - SSH only for SSH transport and the optional doctor probe
-- GitHub CLI only as an optional token fallback
 
 There are no Python, jq, framework, or third-party runtime dependencies.
+GitHub CLI (`gh`) is neither required nor invoked.
 
 ## Install
 
@@ -62,9 +62,9 @@ are `ASC_CONFIG`, `ASC_ORGANIZATION`, `ASC_WORKSPACE`,
 `ASC_REPOSITORY_PREFIX`, `ASC_INCLUDE_DOT_GITHUB`, `ASC_CLONE_PROTOCOL`, and
 `ASC_REMOTE`. Unknown fields, duplicate fields, and malformed types are rejected.
 
-API token precedence is `ASC_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`, then an
-optional silent `gh auth token` fallback. Tokens are used only in the REST
-authorization header and are never stored or printed.
+API token precedence is `ASC_GITHUB_TOKEN`, `GH_TOKEN`, then `GITHUB_TOKEN`.
+Tokens are used only in the REST authorization header and are never stored or
+printed.
 
 ## Commands
 
@@ -79,7 +79,8 @@ asc repo status
 asc repo status --json
 asc repo sync --dry-run
 asc repo sync
-asc repo save asc-cpp --message "Describe the change" --dry-run
+asc repo save asc-cpp --dry-run
+asc repo save asc-cpp
 asc repo save asc-cpp --message "Describe the change"
 asc update --check
 asc configure asc-cpp --preset dev
@@ -104,9 +105,9 @@ the archive, and runs the same hash-guarded installer used above. It never invok
 `repo sync` is download-only: it fetches and fast-forwards clean worktrees from
 their upstream branches. `repo save` is upload-only and intentionally operates
 on exactly one repository: it reviews a plan, fetches to detect remote changes,
-stages all local changes, commits with the required message, and pushes the
-tracked branch. It refuses remote-ahead, diverged, detached, conflicted, or
-untracked-branch states.
+stages all local changes, commits, and pushes the tracked branch. Without
+`--message`, the local-time message is `Updated at YYYY-MM-DD HH:MM:SS`. It
+refuses remote-ahead, diverged, detached, conflicted, or untracked-branch states.
 
 Global options must precede the command: `--config`, `--organization`,
 `--workspace`, and `--no-color`. See [commands.md](docs/commands.md) for schemas,
@@ -120,8 +121,8 @@ exit codes, and exact external commands.
 - Status is local, read-only, nonrecursive, and uses porcelain v2.
 - Sync skips dirty, detached, missing-upstream, wrong-remote, and divergent work.
 - Sync runs only `fetch` and `merge --ff-only`; dry-run runs neither.
-- Save requires one repository and an explicit message, supports a read-only
-  plan, prompts by default, and fetches before staging.
+- Save requires one repository, uses a timestamp message by default, supports a
+  read-only plan, prompts by default, and fetches before staging.
 - Outside `repo save`, there is no reset, clean, stash, rebase, checkout, commit,
   push, or force path.
 - Vendoring is local-only, verifies SHA-256 manifests, refuses modified managed

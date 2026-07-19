@@ -140,27 +140,6 @@ initialize_git_repository() {
   git -C "${repository}" commit -qm initial
 }
 
-write_gh_mock() {
-  local bin_directory="$1"
-  cat >"${bin_directory}/gh" <<'EOF'
-#!/usr/bin/env bash
-set -o errexit
-set -o nounset
-set -o pipefail
-printf '%s\n' "$*" >>"${MOCK_LOG}"
-case "${1:-}" in
-  repo)
-    [[ "${MOCK_GH_FAIL:-false}" != "true" ]] || exit 1
-    printf '%b' "${MOCK_GH_REPOSITORIES:-}"
-    ;;
-  api) printf '%s\n' "${MOCK_GH_USER:-escapetiger}" ;;
-  config) printf '%s\n' "${MOCK_GH_PROTOCOL:-ssh}" ;;
-  --version) printf 'gh version test\n' ;;
-esac
-EOF
-  chmod +x "${bin_directory}/gh"
-}
-
 write_curl_mock() {
   local bin_directory="$1"
   cat >"${bin_directory}/curl" <<'EOF'

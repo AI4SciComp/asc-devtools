@@ -3,8 +3,8 @@
 - `config.py` strictly loads the flat JSON schema and resolves canonical
   precedence.
 - `process.py` is the sole subprocess boundary and always uses argument arrays.
-- `github.py` owns bounded direct REST requests, pagination, filtering, and the
-  optional `gh auth token` fallback.
+- `github.py` owns bounded direct REST requests, pagination, filtering, and
+  optional environment-token authentication.
 - `repositories.py` enforces direct-child containment, remote identity,
   porcelain-v2 inspection, download-only fast-forward synchronization, and a
   reviewed single-repository commit/push save transaction.

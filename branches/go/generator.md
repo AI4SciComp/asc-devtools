@@ -110,7 +110,7 @@ Requirements:
 - Runtime users must not need Go, Python, Node.js, Ruby, or a package manager.
 - Git is the only universally required external executable.
 - CMake and CTest are required only for their corresponding commands.
-- GitHub CLI (`gh`) is optional. Never require it for core operation.
+- GitHub CLI (`gh`) must not be required or invoked.
 - Shell is permitted only for a small installer or generated Bash completion;
   business logic belongs in Go.
 
@@ -152,7 +152,7 @@ Before implementation:
 3. Read existing documentation, source, tests, workflows, license, and remotes.
 4. Identify uncommitted user changes and preserve them.
 5. Run existing checks to establish a baseline.
-6. Record available Go, Git, CMake, CTest, and `gh` versions.
+6. Record available Go, Git, CMake, and CTest versions.
 7. Compare the actual repository with this specification. Adapt filenames when
    justified, while preserving the specified behavior and constraints.
 
@@ -288,10 +288,10 @@ GITHUB_TOKEN
 NO_COLOR
 ```
 
-Token precedence is `ASC_GITHUB_TOKEN`, `GH_TOKEN`, then `GITHUB_TOKEN`. An
-optional fallback may execute `gh auth token` only when `gh` is installed and no
-environment token exists. Public repository discovery must work without a token;
-private organization repositories require authenticated API access.
+Token precedence is `ASC_GITHUB_TOKEN`, `GH_TOKEN`, then `GITHUB_TOKEN`. Do not
+invoke GitHub CLI for a fallback token. Public repository discovery must work
+without a token; private organization repositories require authenticated API
+access through one of the environment variables.
 
 Use `os.UserHomeDir`, not raw string replacement, to expand a leading `~` or
 `~/`. Reject `~otheruser`. Clean and make the workspace absolute. Reject a
@@ -368,8 +368,7 @@ codes where meaningful and distinguish “executable missing” from process fai
   then clone it.
 - SSH protocol runs `git clone -- <ssh_url> <absolute_destination>`.
 - HTTPS protocol runs `git clone -- <clone_url> <absolute_destination>`.
-- Never pass an SSH URL such as `git@github.com:AI4SciComp/repo.git` to
-  `gh repo clone`; this command does not use `gh repo clone` at all.
+- Clone only by passing the API-provided URL to `git clone`.
 - If the destination is already a valid Git working tree for the expected
   organization repository, report “already present” and continue.
 - If a non-repository file/directory occupies the destination, report a conflict
@@ -460,7 +459,6 @@ scientific repository's build system in v0.1.
 - whether private-repository discovery is likely available;
 - SSH executable availability and, optionally, a bounded GitHub SSH probe;
 - CMake and CTest availability and versions;
-- optional `gh` availability and authentication-token fallback;
 - whether the binary is found on `PATH`.
 
 Label checks as pass, warning, or failure. `--json` must provide structured
@@ -568,7 +566,7 @@ Provide table-driven unit tests and meaningful integration tests for:
 
 Use `t.TempDir`. For Git behavior, create temporary local repositories with Git
 when appropriate. For deterministic command tests, place tiny fake `git`,
-`cmake`, `ctest`, or `gh` executables in a temporary `PATH`; never modify the
+`cmake`, or `ctest` executables in a temporary `PATH`; never modify the
 developer's real repositories or global Git configuration. Set local test-repo
 user identity when commits are needed.
 
@@ -627,9 +625,8 @@ Update or create:
   source or important configuration.
 
 Document authentication without putting a real token in shell history. Explain
-that the environment-token approach works without `gh`, while an existing `gh`
-login may optionally supply a token. Explain that Git transport authentication
-(SSH key or HTTPS credentials) is distinct from REST API authentication.
+that REST authentication uses only the documented environment variables and
+that Git transport authentication (SSH key or HTTPS credentials) is distinct.
 
 ## 21. Security and safety invariants
 
@@ -686,8 +683,8 @@ The task is complete only when:
 - `asc` builds as a statically usable `CGO_ENABLED=0` binary;
 - `go.mod` contains no third-party dependency;
 - every required command has help, validation, and safe error behavior;
-- public discovery works without `gh`; authenticated discovery supports private
-  repositories via environment token and optional `gh auth token` fallback;
+- public discovery works without a token; authenticated discovery supports
+  private repositories through the documented environment variables;
 - clone/status/sync preserve every safety invariant;
 - standard-library tests cover success and significant failure paths;
 - `gofmt`, `go vet`, tests, race tests, and build pass;
@@ -728,11 +725,12 @@ contract.
 
 This section supersedes the earlier prohibition on application commit/push
 functionality only for one explicit command. Add
-`asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`. Keep `repo sync`
+`asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]`. Keep `repo sync`
 download-only and document that it fetches plus fast-forward merges clean
-worktrees; it never uploads. Save operates on exactly one managed worktree,
-requires a short one-line message, prints an exact plan, and prompts unless
-`--yes`. Before staging, revalidate the reviewed status, fetch the configured
+worktrees; it never uploads. Save operates on exactly one managed worktree and
+defaults to `Updated at YYYY-MM-DD HH:MM:SS` in local time when `--message` is
+omitted. It prints an exact plan and prompts unless `--yes`. Before staging,
+revalidate the reviewed status and fetch the configured
 remote, and refuse detached HEAD, conflicts, missing/wrong upstream, remote-ahead,
 or diverged histories. Then stage all changes, commit only a nonempty index, and
 push the exact tracked branch without force. A clean locally-ahead branch may be

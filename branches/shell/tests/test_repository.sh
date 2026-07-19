@@ -109,11 +109,16 @@ test_save_commits_pushes_and_refuses_remote_ahead() {
   assert_equal "${before}" "$(git -C "${bare}" rev-parse HEAD)"
 
   capture_command env HOME="${directory}/home" PATH="${SYSTEM_PATH}" ASC_WORKSPACE="${workspace}" \
-    "${PROJECT_ROOT}/bin/asc" repo save asc-one --message 'Save local work' --yes
+    "${PROJECT_ROOT}/bin/asc" repo save asc-one --dry-run
+  assert_success "${CAPTURED_STATUS}"
+  assert_contains "${CAPTURED_OUTPUT}" "commit -m Updated\\ at\\ "
+
+  capture_command env HOME="${directory}/home" PATH="${SYSTEM_PATH}" ASC_WORKSPACE="${workspace}" \
+    "${PROJECT_ROOT}/bin/asc" repo save asc-one --yes
   assert_success "${CAPTURED_STATUS}"
   assert_contains "${CAPTURED_OUTPUT}" "committed and pushed"
   remote_subject=$(git -C "${bare}" log -1 --format=%s)
-  assert_equal "Save local work" "${remote_subject}"
+  [[ "${remote_subject}" =~ ^Updated\ at\ [0-9]{4}-[0-9]{2}-[0-9]{2}\ [0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]
 
   git -C "${seed}" pull -q --ff-only
   printf 'remote\n' >"${seed}/remote.txt"

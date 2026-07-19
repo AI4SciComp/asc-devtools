@@ -9,8 +9,9 @@ This addendum overrides conflicting v0.1 details below:
 
 - use strict `~/.config/asc/config.json` with camelCase keys and canonical CLI,
   environment, file, default precedence;
-- use the direct GitHub REST API with bounded responses and optional
-  `gh auth token` fallback, not `gh repo list`;
+- use the direct GitHub REST API with bounded responses and environment-token
+  authentication; never invoke GitHub CLI. This overrides every lower v0.1
+  instruction that mentions GitHub CLI;
 - support `doctor --json`, `repo status --json`, clone `--protocol`, sync
   `--dry-run`, and `completion bash` with the documented stable schemas;
 - require `--preset` and invoke the exact CMake/CTest argument arrays;
@@ -111,8 +112,8 @@ Before implementing:
    and follow them.
 3. Determine whether the current implementation is Bash, Python, or mixed.
 4. Run existing tests and record baseline failures.
-5. Check installed versions of Python, Git, GitHub CLI, CMake, CTest, and relevant
-   quality tools.
+5. Check installed versions of Python, Git, CMake, CTest, and relevant quality
+   tools.
 6. Review the supplied Google Python Style Guide. Follow its current naming,
    import, documentation, typing, exception, and main-function guidance. If the
    repository contains C++ code, also follow the supplied Google C++ Style Guide.
@@ -220,8 +221,8 @@ clone_protocol = ssh
 ```
 
 Do not confuse the organization with the authenticated user `escapetiger`.
-Repository discovery must query `AI4SciComp`; authentication is handled by the
-user's GitHub CLI session.
+Repository discovery must query `AI4SciComp`; optional authentication comes from
+`ASC_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`.
 
 ## 5. External command boundary
 
@@ -241,13 +242,9 @@ Do not scatter raw `subprocess.run` calls throughout the codebase.
 
 ## 6. GitHub repository discovery
 
-Use GitHub CLI for authenticated organization discovery:
-
-```bash
-gh repo list AI4SciComp --limit 1000 --json ...
-```
-
-Parse JSON in Python. Do not parse human-formatted terminal tables.
+Use the GitHub REST API directly for organization discovery. Parse bounded JSON
+responses with the Python standard library and enforce request timeouts. Never
+invoke GitHub CLI or parse human-formatted terminal tables.
 
 By default, include:
 
@@ -275,9 +272,8 @@ Requirements:
 - Respect the configured clone protocol.
 - For SSH, the effective remote should be equivalent to:
   `git@github.com:AI4SciComp/REPOSITORY.git`.
-- It is acceptable to call `gh repo clone AI4SciComp/REPOSITORY`, provided GitHub
-  CLI is configured to use SSH. Direct `git clone` with an explicit SSH URL is
-  also acceptable. Choose one approach and document it precisely.
+- Use `git clone` with the API-provided SSH or HTTPS URL and document it
+  precisely.
 - Never delete or replace an existing directory.
 - Return a nonzero exit status if any requested clone fails.
 
@@ -337,21 +333,20 @@ Using `git pull --ff-only` is acceptable for the first implementation. If separa
 - resolved configuration path;
 - organization;
 - workspace;
-- authenticated GitHub username from `gh api user` when available;
-- Git protocol configured in GitHub CLI;
-- availability and version of Python, Git, GitHub CLI, CMake, and CTest;
+- API token availability without printing the token;
+- availability and version of Python, Git, CMake, and CTest;
 - whether the workspace exists and is writable;
-- whether GitHub CLI can access `AI4SciComp` repositories;
+- whether direct REST access can list `AI4SciComp` repositories;
 - clear remediation suggestions for failed checks.
 
 Diagnostics must distinguish:
 
 - Git SSH authentication;
-- GitHub CLI API authentication;
+- environment-token REST API authentication;
 - organization repository permissions.
 
-Do not claim that Git and `gh` use the same credential for every operation. Git
-SSH transport uses the SSH key; GitHub CLI API operations use its stored token.
+Do not claim Git transport and REST API requests use the same credential. Git
+SSH transport uses the SSH key; REST uses the optional environment token.
 
 ## 12. CMake workflow
 
@@ -476,7 +471,7 @@ Write a complete `README.md` that includes:
 - distinction between `escapetiger` and `AI4SciComp`;
 - requirements;
 - WSL2 installation;
-- GitHub CLI authentication;
+- GitHub REST authentication through environment variables;
 - configuration;
 - quick start;
 - command examples;
@@ -523,7 +518,7 @@ At minimum, test:
 - `.github` inclusion/exclusion;
 - archived repository filtering;
 - deterministic sorting;
-- malformed JSON or failed `gh` command.
+- malformed JSON or failed REST request.
 
 ### Local repositories
 
@@ -564,7 +559,7 @@ At minimum, test:
 - useful user-facing errors without tracebacks;
 - exit codes.
 
-Use mocks for GitHub CLI and external tools. Use temporary real Git repositories
+Inject fake HTTP transports and mock external tools. Use temporary real Git repositories
 for behavior that is safer and clearer to test with Git itself. Configure a local
 test identity inside temporary repositories; do not modify the user's global Git
 configuration.
@@ -664,11 +659,12 @@ deterministic packaging helper and document the release asset contract.
 
 This section supersedes the earlier prohibition on application commit/push
 functionality only for one explicit command. Add
-`asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`. Keep `repo sync`
+`asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]`. Keep `repo sync`
 download-only and document that it fetches plus fast-forward merges clean
-worktrees; it never uploads. Save operates on exactly one managed worktree,
-requires a short one-line message, prints an exact plan, and prompts unless
-`--yes`. Before staging, revalidate the reviewed status, fetch the configured
+worktrees; it never uploads. Save operates on exactly one managed worktree and
+defaults to `Updated at YYYY-MM-DD HH:MM:SS` in local time when `--message` is
+omitted. It prints an exact plan and prompts unless `--yes`. Before staging,
+revalidate the reviewed status and fetch the configured
 remote, and refuse detached HEAD, conflicts, missing/wrong upstream, remote-ahead,
 or diverged histories. Then stage all changes, commit only a nonempty index, and
 push the exact tracked branch without force. A clean locally-ahead branch may be

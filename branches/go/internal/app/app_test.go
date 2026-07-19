@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AI4SciComp/asc-devtools/internal/config"
 	"github.com/AI4SciComp/asc-devtools/internal/process"
@@ -130,6 +131,11 @@ func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 	if repository, message, dryRun, yes, err := parseRepoSave([]string{"asc-one", "--message", "Save work", "--dry-run", "--yes"}); err != nil || repository != "asc-one" || message != "Save work" || !dryRun || !yes {
 		t.Fatalf("parseRepoSave() = %q, %q, %v, %v, %v", repository, message, dryRun, yes, err)
 	}
+	if repository, message, dryRun, yes, err := parseRepoSave([]string{"asc-one", "--dry-run"}); err != nil || repository != "asc-one" || !dryRun || yes {
+		t.Fatalf("parseRepoSave(default) = %q, %q, %v, %v, %v", repository, message, dryRun, yes, err)
+	} else if _, err := time.Parse("Updated at 2006-01-02 15:04:05", message); err != nil {
+		t.Fatalf("default save message = %q: %v", message, err)
+	}
 }
 
 func TestWorkspaceHasNoNetworkOrDiagnostics(t *testing.T) {
@@ -185,12 +191,7 @@ func TestDoctorJSONAndCompletion(t *testing.T) {
 	workspace := t.TempDir()
 	var stdout, stderr bytes.Buffer
 	runner := &appRunner{}
-	lookup := func(name string) (string, error) {
-		if name == "gh" {
-			return "", os.ErrNotExist
-		}
-		return "/usr/bin/" + name, nil
-	}
+	lookup := func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	code := Run(context.Background(), []string{"doctor", "--json"}, Dependencies{
 		Stdout:     &stdout,
 		Stderr:     &stderr,

@@ -119,7 +119,7 @@ func decodeResponse(response *http.Response) ([]Repository, bool, error) {
 func apiError(response *http.Response) error {
 	switch response.StatusCode {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("GitHub API authentication failed (401): configure ASC_GITHUB_TOKEN or run gh auth login")
+		return fmt.Errorf("GitHub API authentication failed (401): configure ASC_GITHUB_TOKEN")
 	case http.StatusForbidden:
 		if response.Header.Get("X-RateLimit-Remaining") == "0" {
 			return fmt.Errorf("GitHub API rate limit exceeded (403): authenticate or wait for reset")

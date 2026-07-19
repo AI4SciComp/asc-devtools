@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/AI4SciComp/asc-devtools/internal/cmake"
 	"github.com/AI4SciComp/asc-devtools/internal/cmakevendor"
@@ -649,8 +650,11 @@ func parseRepoSave(arguments []string) (repository, message string, dryRun, yes 
 			repository = arguments[index]
 		}
 	}
-	if repository == "" || message == "" {
-		return "", "", false, false, errors.New("repo save requires one repository and --message")
+	if repository == "" {
+		return "", "", false, false, errors.New("repo save requires one repository")
+	}
+	if message == "" {
+		message = "Updated at " + time.Now().Format("2006-01-02 15:04:05")
 	}
 	return repository, message, dryRun, yes, nil
 }
@@ -726,16 +730,7 @@ func runDoctor(ctx context.Context, cfg config.Config, arguments []string, depen
 	return ExitSuccess
 }
 
-func githubClient(ctx context.Context, cfg config.Config, dependencies Dependencies) (*github.Client, config.Config) {
-	if cfg.GitHubToken == "" {
-		if _, err := dependencies.LookupPath("gh"); err == nil {
-			result, err := dependencies.Runner.Run(ctx, process.Command{Name: "gh", Args: []string{"auth", "token"}})
-			if err == nil && strings.TrimSpace(result.Stdout) != "" {
-				cfg.GitHubToken = strings.TrimSpace(result.Stdout)
-				cfg.GitHubTokenSource = "gh auth token"
-			}
-		}
-	}
+func githubClient(_ context.Context, cfg config.Config, dependencies Dependencies) (*github.Client, config.Config) {
 	client := github.NewClient(cfg.GitHubToken, dependencies.VersionInfo.Version)
 	if dependencies.HTTPClient != nil {
 		client.HTTPClient = dependencies.HTTPClient
@@ -908,7 +903,7 @@ Commands:
   repo clone [NAME...]            Clone missing repositories
   repo status [NAME...] [--json]  Inspect local repositories
   repo sync [NAME...] [--dry-run] Download remote fast-forwards into clean repositories
-  repo save NAME --message TEXT   Commit local changes and push the tracked branch
+  repo save NAME [--message TEXT] Commit local changes and push the tracked branch
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
@@ -932,7 +927,7 @@ const repoListUsage = "Usage: asc repo list [--json]\n"
 const repoCloneUsage = "Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n"
 const repoStatusUsage = "Usage: asc repo status [REPOSITORY...] [--json]\n"
 const repoSyncUsage = "Usage: asc repo sync [REPOSITORY...] [--dry-run]\n"
-const repoSaveUsage = "Usage: asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]\n"
+const repoSaveUsage = "Usage: asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]\n"
 const completionUsage = "Usage: asc completion bash\n"
 const updateUsage = "Usage: asc update [--check] [--yes] [--prefix PATH]\n"
 const cmakeGroupUsage = `Usage: asc cmake COMMAND [OPTIONS]

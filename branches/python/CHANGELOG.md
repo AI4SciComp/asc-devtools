@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- `asc repo save` now defaults to `Updated at YYYY-MM-DD HH:MM:SS` when
+  `--message` is omitted.
+- Removed the GitHub CLI token fallback; API authentication now uses only the
+  documented environment variables.
 - Matched the Go command, JSON configuration, direct REST, Git safety, required
   preset, diagnostics, completion, and exit-code contracts.
 - Published this implementation independently on `python`.

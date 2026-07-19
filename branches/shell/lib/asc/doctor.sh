@@ -86,11 +86,6 @@ asc_doctor() {
   else
     asc_doctor_add asc-cmake-source warning "${vendor_source} is not a Git worktree"
   fi
-  if command -v gh >/dev/null 2>&1; then
-    asc_doctor_add gh pass "optional GitHub CLI is available"
-  else
-    asc_doctor_add gh warning "optional GitHub CLI is not installed"
-  fi
   if [[ -n "${ASC_GITHUB_TOKEN_VALUE}" ]]; then
     asc_doctor_add api-authentication pass "GitHub API token is available from ${ASC_GITHUB_TOKEN_SOURCE}"
   else

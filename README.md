@@ -14,6 +14,20 @@ tests, documentation, installation scripts, and verified uninstall support.
 They share the same command surface, JSON configuration, GitHub REST behavior,
 Git safety rules, CMake/CTest invocation, and exit-code contract.
 
+## Prerequisites
+
+| Implementation | Required runtime | Build or install requirement |
+| --- | --- | --- |
+| Go | Git for repository commands | Go 1.25+ only when building from source |
+| Python | Python 3.11+ and Git | No third-party Python packages |
+| Bash | Bash 4.4+, Git, curl, and standard Unix tools | No compiled-language toolchain |
+
+All implementations call the GitHub REST API directly. GitHub CLI (`gh`) is
+neither required nor invoked. Public repositories work without a token; private
+repository discovery requires `ASC_GITHUB_TOKEN`, `GH_TOKEN`, or
+`GITHUB_TOKEN`. SSH is needed only for SSH clone/push transport, while CMake and
+CTest are needed only for their corresponding workflow commands.
+
 ## Functionality
 
 | Functionality | Commands | Go | Python | Bash |
@@ -23,7 +37,7 @@ Git safety rules, CMake/CTest invocation, and exit-code contract.
 | Safe repository cloning | `repo clone` | Yes | Yes | Yes |
 | Local Git status reporting | `repo status` | Yes | Yes | Yes |
 | Fast-forward-only synchronization | `repo sync` | Yes | Yes | Yes |
-| Reviewed commit and push workflow | `repo save` | Yes | Yes | Yes |
+| Reviewed commit and push workflow with timestamp default | `repo save` | Yes | Yes | Yes |
 | CMake configure, build, and test | `configure`, `build`, `test` | Yes | Yes | Yes |
 | CMake workflows and preset discovery | `cmake workflow`, `cmake presets` | Yes | Yes | Yes |
 | Guarded CMake module vendoring | `cmake vendor` | Yes | Yes | Yes |

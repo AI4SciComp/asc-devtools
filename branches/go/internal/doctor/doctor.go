@@ -50,11 +50,6 @@ func (s Service) Run(ctx context.Context) []Check {
 		toolCheck(ctx, s.Runner, "ctest", false),
 		vendorSourceCheck(ctx, s.Runner, s.Config),
 	}
-	if _, err := lookup("gh"); err == nil {
-		checks = append(checks, Check{Name: "gh", Status: "pass", Detail: "optional GitHub CLI is available"})
-	} else {
-		checks = append(checks, Check{Name: "gh", Status: "warning", Detail: "optional GitHub CLI is not installed"})
-	}
 	if s.Config.GitHubToken != "" {
 		checks = append(checks, Check{Name: "api-authentication", Status: "pass", Detail: "GitHub API token is available from " + s.Config.GitHubTokenSource})
 	} else {

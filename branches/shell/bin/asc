@@ -61,7 +61,7 @@ Commands:
   repo clone [NAME...]            Clone missing repositories
   repo status [NAME...] [--json]  Inspect local repositories
   repo sync [NAME...] [--dry-run] Download remote fast-forwards into clean repositories
-  repo save NAME --message TEXT   Commit local changes and push the tracked branch
+  repo save NAME [--message TEXT] Commit local changes and push the tracked branch
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
@@ -464,7 +464,7 @@ asc_main() {
           clone) printf 'Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n' ;;
           status) printf 'Usage: asc repo status [REPOSITORY...] [--json]\n' ;;
           sync) printf 'Usage: asc repo sync [REPOSITORY...] [--dry-run]\n' ;;
-          save) printf 'Usage: asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]\n' ;;
+          save) printf 'Usage: asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]\n' ;;
           *) asc_usage_error "unknown repo command: ${repo_command}"; return ;;
         esac
         return 0
@@ -556,10 +556,13 @@ asc_main() {
                 ;;
             esac
           done
-          [[ -n "${save_repository}" && -n "${save_message}" ]] || {
-            asc_usage_error "repo save requires one repository and --message"
+          [[ -n "${save_repository}" ]] || {
+            asc_usage_error "repo save requires one repository"
             return
           }
+          if [[ -z "${save_message}" ]]; then
+            printf -v save_message 'Updated at %(%Y-%m-%d %H:%M:%S)T' -1
+          fi
           asc_repository_plan_save "${save_repository}" "${save_message}" || return 1
           if [[ "${save_dry_run}" == true ]]; then
             asc_repository_print_save_plan
