@@ -107,6 +107,22 @@ func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 	if code != ExitSuccess {
 		t.Fatalf("repo list help code = %d", code)
 	}
+	code, stdout, stderr = runApp(t, []string{"cmake", "--help"}, nil, nil, nil)
+	if code != ExitSuccess || !strings.Contains(stdout, "vendor {status|plan|apply}") || stderr != "" {
+		t.Fatalf("cmake help = %d, %q, %q", code, stdout, stderr)
+	}
+	code, _, stderr = runApp(t, []string{"cmake", "workflow", "asc-cpp", "--configure-preset", "dev"}, nil, nil, nil)
+	if code != ExitUsage || !strings.Contains(stderr, "all three workflow presets") {
+		t.Fatalf("workflow validation = %d, %q", code, stderr)
+	}
+	code, stdout, stderr = runApp(t, []string{"update", "--help"}, nil, nil, nil)
+	if code != ExitSuccess || !strings.Contains(stdout, "--check") || stderr != "" {
+		t.Fatalf("update help = %d, %q, %q", code, stdout, stderr)
+	}
+	code, stdout, stderr = runApp(t, []string{"update", "--check"}, nil, nil, apiClient("not found", http.StatusNotFound))
+	if code != ExitFailure || stdout != "" || !strings.Contains(stderr, "no published asc release") {
+		t.Fatalf("update without release = %d, %q, %q", code, stdout, stderr)
+	}
 }
 
 func TestWorkspaceHasNoNetworkOrDiagnostics(t *testing.T) {

@@ -104,7 +104,11 @@ The default file is `~/.config/asc/config.json`; select another with
   "repositoryPrefix": "asc-",
   "includeDotGitHub": true,
   "cloneProtocol": "ssh",
-  "remote": "origin"
+  "remote": "origin",
+  "cmake": {
+    "vendorDirectory": "cmake/asc",
+    "sourceRepository": "asc-cmake"
+  }
 }
 ```
 
@@ -131,11 +135,25 @@ asc repo status
 asc repo status --json
 asc repo sync --dry-run
 asc repo sync
+asc update --check
 asc configure asc-cpp --preset dev
 asc build asc-cpp --preset dev
 asc test asc-cpp --preset dev
+asc cmake workflow asc-cpp \
+  --configure-preset dev --build-preset dev --test-preset dev
+asc cmake presets asc-cpp
+asc cmake vendor status asc-cpp
+asc cmake vendor plan asc-cpp
+asc cmake vendor apply asc-cpp --yes
 source <(asc completion bash)
 ```
+
+`asc update` checks the latest GitHub release and updates the currently managed
+installation after confirmation. Use `asc update --check` for a read-only check,
+or `sudo asc update --yes` when the installation prefix requires root access.
+The updater requires a release asset named for the current OS and architecture
+plus `SHA256SUMS`; it verifies the archive before running the same hash-guarded
+installer used above. It never invokes `sudo` itself.
 
 Clone without names processes every eligible API repository. Status and sync
 without names process managed Git worktrees that are direct workspace children.
@@ -152,6 +170,8 @@ without names process managed Git worktrees that are direct workspace children.
 - Sync performs only fetch plus `merge --ff-only`; dry-run performs neither.
 - There is no reset, clean, stash, rebase, checkout, commit, push, force
   operation, telemetry, or credential storage.
+- Vendoring reads only a local `asc-cmake` checkout, verifies exact SHA-256
+  content, refuses locally modified managed files, and preserves unmanaged files.
 - GitHub responses and error bodies have size limits and HTTP requests time out.
 
 See [commands.md](docs/commands.md) and
@@ -170,9 +190,11 @@ CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
 Tests use only the standard `testing` package, `httptest`, fake process runners,
 and temporary local Git repositories. They never use live GitHub or user state.
 
-`AI4SciComp/.github` owns organization metadata and is optionally managed like
-other repositories. Scientific repositories own their `CMakePresets.json`; a
-future `asc-cmake` may supply shared CMake modules without moving build policy
-into this CLI.
+The current dynamic workspace includes `asc-devtools`, `asc-cmake`, `asc-cpp`,
+`asc-xde`, `asc-kinetic`, `asc-lean`, and `asc-lab`, plus optional `.github`.
+Discovery remains API-driven rather than hard-coded. Scientific repositories own
+their `CMakePresets.json`; `asc-cmake` supplies shared modules for offline,
+reproducible vendoring without moving build policy into this CLI. Configure never
+updates vendored files automatically, and users review and commit vendor changes.
 
 Licensed under Apache-2.0. See [LICENSE](LICENSE).

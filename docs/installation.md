@@ -19,6 +19,39 @@ The manifest records hashes for the managed executable and completion. An
 upgrade refuses to overwrite either file if it was modified or if the manifest
 is missing.
 
+## Self-update
+
+Check without modifying the installation:
+
+```bash
+asc update --check
+```
+
+Update interactively, or approve non-interactively:
+
+```bash
+asc update
+asc update --yes
+sudo asc update --yes  # for a root-owned /usr/local installation
+```
+
+The command infers the prefix from `PREFIX/bin/asc`; pass `--prefix /opt/asc`
+when needed. It downloads only the fixed Go asset for the running OS/architecture
+and `SHA256SUMS` from the latest GitHub release, verifies the hash, safely extracts
+the bundle, and calls the normal installer. It refuses unmanaged or locally
+modified installations and never invokes `sudo`.
+
+Release maintainers create the update asset from an already versioned binary:
+
+```bash
+./scripts/package_update.sh --binary ./dist/asc --output ./dist/release \
+  --os linux --arch amd64
+```
+
+Upload the resulting `asc-devtools-go-OS-ARCH.tar.gz` and `SHA256SUMS` as assets
+on the same release. Build each supported OS/architecture with the release
+version embedded before packaging it.
+
 ## Build on Ubuntu/WSL2
 
 Go 1.25 or newer is required to build:
@@ -89,3 +122,5 @@ asc doctor
 
 API discovery works publicly without GitHub CLI. Configure a token for private
 repositories and separately configure Git SSH or HTTPS credentials for cloning.
+The installer does not vendor CMake modules. After cloning `asc-cmake`, use
+`asc cmake vendor plan REPOSITORY` and review the explicit plan before apply.
