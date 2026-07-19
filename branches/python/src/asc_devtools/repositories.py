@@ -386,9 +386,7 @@ def plan_save_repository(
     """Create a local-only plan for committing and pushing one repository."""
     message = message.strip()
     if not message or len(message) > 500 or any(char in message for char in "\0\r\n"):
-        raise RepositoryError(
-            "commit message must be 1-500 characters on one line"
-        )
+        raise RepositoryError("commit message must be 1-500 characters on one line")
     selected = select_local_repositories(config, (name,), runner)
     if len(selected) != 1 or selected[0][2]:
         detail = selected[0][2] if selected else "save requires one repository"
@@ -403,9 +401,9 @@ def plan_save_repository(
     if not status.upstream:
         raise RepositoryError(f"branch {status.branch} has no upstream")
     remote_prefix = f"{config.remote}/"
-    if not status.upstream.startswith(remote_prefix) or not status.upstream.removeprefix(
+    if not status.upstream.startswith(
         remote_prefix
-    ):
+    ) or not status.upstream.removeprefix(remote_prefix):
         raise RepositoryError(
             f"upstream does not use configured remote: {status.upstream}"
         )

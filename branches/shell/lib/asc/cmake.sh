@@ -157,9 +157,18 @@ asc_cmake_workflow() {
   asc_cmake_repository "${repository}" true >/dev/null || return 1
   for operation in configure build test; do
     case "${operation}" in
-      configure) preset="${configure_preset}"; command=(cmake --preset "${preset}") ;;
-      build) preset="${build_preset}"; command=(cmake --build --preset "${preset}") ;;
-      test) preset="${test_preset}"; command=(ctest --preset "${preset}") ;;
+      configure)
+        preset="${configure_preset}"
+        command=(cmake --preset "${preset}")
+        ;;
+      build)
+        preset="${build_preset}"
+        command=(cmake --build --preset "${preset}")
+        ;;
+      test)
+        preset="${test_preset}"
+        command=(ctest --preset "${preset}")
+        ;;
     esac
     printf 'cmake workflow: %s: %s\n' "${operation}" "$(asc_cmake_describe "${command[@]}")" >&2
     asc_cmake_run "${operation}" "${repository}" "${preset}" || return $?

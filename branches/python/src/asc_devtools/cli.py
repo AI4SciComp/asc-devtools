@@ -30,7 +30,11 @@ from asc_devtools.repositories import (
 )
 from asc_devtools.selfupdate import (
     Transport as UpdateTransport,
+)
+from asc_devtools.selfupdate import (
     default_transport as default_update_transport,
+)
+from asc_devtools.selfupdate import (
     run_update,
 )
 from asc_devtools.vendor import VendorPlan, vendor_apply, vendor_plan, vendor_status
@@ -81,14 +85,26 @@ USAGE = {
     "test": "Usage: asc test REPOSITORY --preset PRESET\n",
     "cmake": "Usage: asc cmake {configure|build|test|workflow|presets|vendor} ...\n",
     "cmake configure": "Usage: asc cmake configure REPOSITORY --preset PRESET\n",
-    "cmake build": "Usage: asc cmake build REPOSITORY --preset PRESET [--target TARGET]...\n",
-    "cmake test": "Usage: asc cmake test REPOSITORY --preset PRESET [--label LABEL] [--output-on-failure]\n",
-    "cmake workflow": "Usage: asc cmake workflow REPOSITORY --configure-preset PRESET --build-preset PRESET --test-preset PRESET\n",
+    "cmake build": (
+        "Usage: asc cmake build REPOSITORY --preset PRESET [--target TARGET]...\n"
+    ),
+    "cmake test": (
+        "Usage: asc cmake test REPOSITORY --preset PRESET "
+        "[--label LABEL] [--output-on-failure]\n"
+    ),
+    "cmake workflow": (
+        "Usage: asc cmake workflow REPOSITORY --configure-preset PRESET "
+        "--build-preset PRESET --test-preset PRESET\n"
+    ),
     "cmake presets": "Usage: asc cmake presets REPOSITORY [--json]\n",
     "cmake vendor": "Usage: asc cmake vendor {status|plan|apply} ...\n",
     "cmake vendor status": "Usage: asc cmake vendor status REPOSITORY [--json]\n",
-    "cmake vendor plan": "Usage: asc cmake vendor plan REPOSITORY [--source PATH] [--ref REF] [--json]\n",
-    "cmake vendor apply": "Usage: asc cmake vendor apply REPOSITORY [--source PATH] [--ref REF] [--yes]\n",
+    "cmake vendor plan": (
+        "Usage: asc cmake vendor plan REPOSITORY [--source PATH] [--ref REF] [--json]\n"
+    ),
+    "cmake vendor apply": (
+        "Usage: asc cmake vendor apply REPOSITORY [--source PATH] [--ref REF] [--yes]\n"
+    ),
 }
 
 
@@ -250,9 +266,7 @@ def _print_vendor_plan(plan: VendorPlan, output: TextIO) -> None:
 
 
 def _print_save_plan(plan: SavePlan, output: TextIO) -> None:
-    print(
-        f"{plan.operation.name}: planned: {plan.operation.detail}", file=output
-    )
+    print(f"{plan.operation.name}: planned: {plan.operation.detail}", file=output)
     for command in plan.operation.plan:
         print(f"  {command}", file=output)
 

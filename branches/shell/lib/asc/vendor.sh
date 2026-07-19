@@ -365,7 +365,7 @@ asc_vendor_status() {
   local repository="$1"
   local read_status index state detail=""
   asc_vendor_target "${repository}" || {
-    ASC_VENDOR_STATUS_STATE=manifest-invalid
+    ASC_VENDOR_STATUS_STATE="manifest-invalid"
     ASC_VENDOR_STATUS_DETAIL="invalid consumer repository"
     return 0
   }
@@ -381,7 +381,7 @@ asc_vendor_status() {
     return 0
   fi
   if ((read_status != 0)); then
-    ASC_VENDOR_STATUS_STATE=manifest-invalid
+    ASC_VENDOR_STATUS_STATE="manifest-invalid"
     ASC_VENDOR_STATUS_DETAIL="invalid vendor manifest"
     ASC_VENDOR_EXTRA_FILES=()
     return 0
@@ -411,7 +411,10 @@ asc_vendor_status() {
     done
   fi
   [[ "${ASC_VENDOR_SOURCE_DIRTY}" != true ]] || detail="source checkout is dirty"
+  # Output globals are consumed by bin/asc after this function returns.
+  # shellcheck disable=SC2034
   ASC_VENDOR_STATUS_STATE="${state}"
+  # shellcheck disable=SC2034
   ASC_VENDOR_STATUS_DETAIL="${detail}"
 }
 
@@ -554,7 +557,7 @@ asc_vendor_apply_current_plan() {
         rm -r -- "${stage}" "${backup}"
         return 1
       fi
-      ASC_VENDOR_CHANGED_INSTALLED[${#ASC_VENDOR_CHANGED_INSTALLED[@]}-1]=true
+      ASC_VENDOR_CHANGED_INSTALLED[${#ASC_VENDOR_CHANGED_INSTALLED[@]} - 1]=true
     fi
   done
   destination="${ASC_VENDOR_TARGET}/${ASC_VENDOR_MANIFEST_NAME}"
@@ -575,7 +578,7 @@ asc_vendor_apply_current_plan() {
     rm -r -- "${stage}" "${backup}"
     return 1
   fi
-  ASC_VENDOR_CHANGED_INSTALLED[${#ASC_VENDOR_CHANGED_INSTALLED[@]}-1]=true
+  ASC_VENDOR_CHANGED_INSTALLED[${#ASC_VENDOR_CHANGED_INSTALLED[@]} - 1]=true
   rm -r -- "${stage}" "${backup}"
 }
 

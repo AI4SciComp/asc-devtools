@@ -151,10 +151,7 @@ def _required_bool(record: Mapping[str, object], key: str) -> bool:
 
 def _api_error(status: int, headers: Mapping[str, str]) -> str:
     if status == 401:
-        return (
-            "GitHub API authentication failed (401): configure "
-            "ASC_GITHUB_TOKEN"
-        )
+        return "GitHub API authentication failed (401): configure ASC_GITHUB_TOKEN"
     if status == 403 and headers.get("X-RateLimit-Remaining") == "0":
         return "GitHub API rate limit exceeded (403): authenticate or wait for reset"
     if status == 403:

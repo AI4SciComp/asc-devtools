@@ -149,9 +149,7 @@ class RepositoryTest(unittest.TestCase):
             (repository / "saved.txt").write_text("saved\n", encoding="utf-8")
             config = configuration(workspace)
             runner = CommandRunner()
-            plan = plan_save_repository(
-                config, "asc-one", "Save local work", runner
-            )
+            plan = plan_save_repository(config, "asc-one", "Save local work", runner)
             self.assertEqual(plan.changes, 1)
             self.assertEqual(len(plan.operation.plan), 4)
             result = apply_save_repository(config, plan, runner)

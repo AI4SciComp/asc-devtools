@@ -214,8 +214,14 @@ asc_run_cmake_vendor() {
         [[ "$1" == --source ]] && source_path="$2" || requested_ref="$2"
         shift 2
         ;;
-      --json) json_output=true; shift ;;
-      --yes) yes=true; shift ;;
+      --json)
+        json_output=true
+        shift
+        ;;
+      --yes)
+        yes=true
+        shift
+        ;;
       -*)
         asc_usage_error "unknown vendor ${vendor_command} option: $1"
         return
@@ -276,7 +282,11 @@ asc_run_cmake_vendor() {
       fi
       asc_vendor_plan "${repository}" "${source_path}" "${requested_ref}" || return 1
       if [[ "${vendor_command}" == plan ]]; then
-        [[ "${json_output}" == true ]] && asc_vendor_plan_json || asc_vendor_print_plan
+        if [[ "${json_output}" == true ]]; then
+          asc_vendor_plan_json
+        else
+          asc_vendor_print_plan
+        fi
         return 0
       fi
       local approved_fingerprint="${ASC_VENDOR_PLAN_FINGERPRINT}"
@@ -326,7 +336,10 @@ asc_run_cmake_group() {
         case "$1" in
           --configure-preset | --build-preset | --test-preset)
             option="$1"
-            (($# >= 2)) || { asc_usage_error "${option} requires a value"; return; }
+            (($# >= 2)) || {
+              asc_usage_error "${option} requires a value"
+              return
+            }
             case "${option}" in
               --configure-preset) configure_preset="$2" ;;
               --build-preset) build_preset="$2" ;;
@@ -334,9 +347,15 @@ asc_run_cmake_group() {
             esac
             shift 2
             ;;
-          -*) asc_usage_error "unknown cmake workflow option: $1"; return ;;
+          -*)
+            asc_usage_error "unknown cmake workflow option: $1"
+            return
+            ;;
           *)
-            [[ -z "${repository}" ]] || { asc_usage_error "cmake workflow takes one repository"; return; }
+            [[ -z "${repository}" ]] || {
+              asc_usage_error "cmake workflow takes one repository"
+              return
+            }
             repository="$1"
             shift
             ;;
@@ -353,19 +372,31 @@ asc_run_cmake_group() {
       while (($# > 0)); do
         case "$1" in
           --json) json_output=true ;;
-          -*) asc_usage_error "unknown cmake presets option: $1"; return ;;
+          -*)
+            asc_usage_error "unknown cmake presets option: $1"
+            return
+            ;;
           *)
-            [[ -z "${repository}" ]] || { asc_usage_error "cmake presets takes one repository"; return; }
+            [[ -z "${repository}" ]] || {
+              asc_usage_error "cmake presets takes one repository"
+              return
+            }
             repository="$1"
             ;;
         esac
         shift
       done
-      [[ -n "${repository}" ]] || { asc_usage_error "cmake presets requires one repository"; return; }
+      [[ -n "${repository}" ]] || {
+        asc_usage_error "cmake presets requires one repository"
+        return
+      }
       asc_cmake_presets "${repository}" "${json_output}"
       ;;
     vendor) asc_run_cmake_vendor "$@" ;;
-    *) asc_usage_error "unknown cmake command: ${cmake_command}"; return ;;
+    *)
+      asc_usage_error "unknown cmake command: ${cmake_command}"
+      return
+      ;;
   esac
 }
 
@@ -465,7 +496,10 @@ asc_main() {
           status) printf 'Usage: asc repo status [REPOSITORY...] [--json]\n' ;;
           sync) printf 'Usage: asc repo sync [REPOSITORY...] [--dry-run]\n' ;;
           save) printf 'Usage: asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]\n' ;;
-          *) asc_usage_error "unknown repo command: ${repo_command}"; return ;;
+          *)
+            asc_usage_error "unknown repo command: ${repo_command}"
+            return
+            ;;
         esac
         return 0
       fi
@@ -542,15 +576,30 @@ asc_main() {
           while (($# > 0)); do
             case "$1" in
               --message)
-                (($# >= 2)) || { asc_usage_error "--message requires a value"; return; }
+                (($# >= 2)) || {
+                  asc_usage_error "--message requires a value"
+                  return
+                }
                 save_message="$2"
                 shift 2
                 ;;
-              --dry-run) save_dry_run=true; shift ;;
-              --yes) save_yes=true; shift ;;
-              -*) asc_usage_error "unknown repo save option: $1"; return ;;
+              --dry-run)
+                save_dry_run=true
+                shift
+                ;;
+              --yes)
+                save_yes=true
+                shift
+                ;;
+              -*)
+                asc_usage_error "unknown repo save option: $1"
+                return
+                ;;
               *)
-                [[ -z "${save_repository}" ]] || { asc_usage_error "repo save takes one repository"; return; }
+                [[ -z "${save_repository}" ]] || {
+                  asc_usage_error "repo save takes one repository"
+                  return
+                }
                 save_repository="$1"
                 shift
                 ;;
@@ -626,14 +675,26 @@ asc_main() {
       local update_check=false update_yes=false update_prefix=""
       while (($# > 0)); do
         case "$1" in
-          --check) update_check=true; shift ;;
-          --yes) update_yes=true; shift ;;
+          --check)
+            update_check=true
+            shift
+            ;;
+          --yes)
+            update_yes=true
+            shift
+            ;;
           --prefix)
-            (($# >= 2)) || { asc_usage_error "--prefix requires a value"; return; }
+            (($# >= 2)) || {
+              asc_usage_error "--prefix requires a value"
+              return
+            }
             update_prefix="$2"
             shift 2
             ;;
-          *) asc_usage_error "unknown update option: $1"; return ;;
+          *)
+            asc_usage_error "unknown update option: $1"
+            return
+            ;;
         esac
       done
       asc_update_run "${update_check}" "${update_yes}" "${update_prefix}"

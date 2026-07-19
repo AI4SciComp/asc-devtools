@@ -88,11 +88,7 @@ def load_manifest(root: Path, prefix: Path, expected: set[str]) -> dict[str, str
     if document.get("prefix") != str(prefix):
         raise InstallError(f"manifest prefix does not match {prefix}")
     hashes = document.get("files")
-    if (
-        not isinstance(hashes, dict)
-        or not hashes
-        or not set(hashes).issubset(expected)
-    ):
+    if not isinstance(hashes, dict) or not hashes or not set(hashes).issubset(expected):
         raise InstallError(f"manifest file set is not upgrade-compatible: {path}")
     if not all(
         isinstance(relative, str) and isinstance(value, str) and len(value) == 64

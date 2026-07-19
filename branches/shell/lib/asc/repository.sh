@@ -335,7 +335,7 @@ asc_repository_plan_save() {
     return 1
   fi
   path="${ASC_WORKSPACE}/${name}"
-  remote_branch="${ASC_STATUS_UPSTREAM#${ASC_REMOTE}/}"
+  remote_branch="${ASC_STATUS_UPSTREAM#"${ASC_REMOTE}"/}"
   ASC_SAVE_NAME="${name}"
   ASC_SAVE_PATH="${path}"
   ASC_SAVE_BRANCH="${ASC_STATUS_BRANCH}"
@@ -423,7 +423,7 @@ asc_repository_apply_save() {
     printf 'Summary: unchanged=1\n'
     return 0
   fi
-  remote_branch="${ASC_SAVE_UPSTREAM#${ASC_REMOTE}/}"
+  remote_branch="${ASC_SAVE_UPSTREAM#"${ASC_REMOTE}"/}"
   if ! git -C "${ASC_SAVE_PATH}" push -- "${ASC_REMOTE}" "HEAD:refs/heads/${remote_branch}"; then
     printf '%s: failed: push failed; local commit was preserved\n' "${ASC_SAVE_NAME}"
     return 1
