@@ -18,7 +18,8 @@ streams, and defines exit codes.
 - `workspace` constructs and verifies direct children, excludes symlinks, and
   discovers only immediate managed Git worktrees.
 - `git` plans clone operations from API URLs, verifies existing remotes, parses
-  porcelain-v2 status, and implements dry-run-aware fast-forward sync.
+  porcelain-v2 status, implements download-only fast-forward sync, and provides
+  a reviewed single-repository commit/push save transaction.
 - `cmake` plans grouped configure/build/test/workflow commands, delegates preset
   interpretation to CMake/CTest, and streams from the repository root.
 - `cmakevendor` validates local sources, strict manifests, hashes and update
@@ -67,6 +68,13 @@ Sync first validates cleanliness, remote, branch, and matching upstream. Dry-run
 stops after these checks. A real sync fetches the configured remote and attempts
 only `merge --ff-only`. Independent repository failures are accumulated and
 reported deterministically.
+
+Save separates review from mutation. Its plan snapshots porcelain-v2 status and
+renders exact argument arrays. Apply rejects a changed snapshot, fetches and
+requires the remote not to be ahead, then stages all paths, commits only a
+nonempty index, and pushes the exact upstream branch. It never pulls, rebases,
+forces, changes branches, or resolves conflicts. A failed push leaves the local
+commit intact for diagnosis or retry.
 
 Equivalent Python and Bash implementations are maintained on separate branches;
 this branch's build and CI paths contain Go only.

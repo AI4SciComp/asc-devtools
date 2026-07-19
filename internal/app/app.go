@@ -520,6 +520,8 @@ func runRepo(ctx context.Context, cfg config.Config, arguments []string, depende
 			usage = repoStatusUsage
 		case "sync":
 			usage = repoSyncUsage
+		case "save":
+			usage = repoSaveUsage
 		default:
 			return usageError(dependencies.Stderr, "unknown repo command: "+subcommand, repoUsage)
 		}
@@ -592,8 +594,71 @@ func runRepo(ctx context.Context, cfg config.Config, arguments []string, depende
 		operations := (gitrepo.Manager{Runner: dependencies.Runner, Config: cfg}).Sync(ctx, names, switches["--dry-run"])
 		writeOperations(dependencies.Stdout, operations)
 		return operationsExit(operations)
+	case "save":
+		repository, message, dryRun, yes, err := parseRepoSave(commandArguments)
+		if err != nil {
+			return usageError(dependencies.Stderr, err.Error(), repoSaveUsage)
+		}
+		manager := gitrepo.Manager{Runner: dependencies.Runner, Config: cfg}
+		plan, err := manager.PlanSave(ctx, repository, message)
+		if err != nil {
+			return operationalError(dependencies.Stderr, err)
+		}
+		if dryRun {
+			writeSavePlan(dependencies.Stdout, plan)
+			return ExitSuccess
+		}
+		if !yes {
+			writeSavePlan(dependencies.Stderr, plan)
+			fmt.Fprint(dependencies.Stderr, "Commit all listed working-tree changes and push? [y/N] ")
+			line, readErr := bufio.NewReader(dependencies.Stdin).ReadString('\n')
+			answer := strings.ToLower(strings.TrimSpace(line))
+			if (readErr != nil && line == "") || (answer != "y" && answer != "yes") {
+				fmt.Fprintln(dependencies.Stderr, "asc: repo save cancelled")
+				return ExitFailure
+			}
+		}
+		operation := manager.ApplySave(ctx, plan)
+		writeOperations(dependencies.Stdout, []gitrepo.Operation{operation})
+		return operationsExit([]gitrepo.Operation{operation})
 	default:
 		return usageError(dependencies.Stderr, "unknown repo command: "+subcommand, repoUsage)
+	}
+}
+
+func parseRepoSave(arguments []string) (repository, message string, dryRun, yes bool, err error) {
+	for index := 0; index < len(arguments); index++ {
+		switch arguments[index] {
+		case "--message":
+			if index+1 >= len(arguments) {
+				return "", "", false, false, errors.New("--message requires a value")
+			}
+			message = arguments[index+1]
+			index++
+		case "--dry-run":
+			dryRun = true
+		case "--yes":
+			yes = true
+		default:
+			if strings.HasPrefix(arguments[index], "-") {
+				return "", "", false, false, fmt.Errorf("unknown option: %s", arguments[index])
+			}
+			if repository != "" {
+				return "", "", false, false, errors.New("repo save takes one repository")
+			}
+			repository = arguments[index]
+		}
+	}
+	if repository == "" || message == "" {
+		return "", "", false, false, errors.New("repo save requires one repository and --message")
+	}
+	return repository, message, dryRun, yes, nil
+}
+
+func writeSavePlan(output io.Writer, plan gitrepo.SavePlan) {
+	fmt.Fprintf(output, "%s: planned: %s\n", plan.Operation.Name, plan.Operation.Detail)
+	for _, command := range plan.Operation.Plan {
+		fmt.Fprintf(output, "  %s\n", command)
 	}
 }
 
@@ -824,6 +889,8 @@ func commandUsage(command string, arguments []string) (string, bool) {
 				return repoStatusUsage, true
 			case "sync":
 				return repoSyncUsage, true
+			case "save":
+				return repoSaveUsage, true
 			}
 		}
 	}
@@ -840,7 +907,8 @@ Commands:
   repo list [--json]              List organization repositories
   repo clone [NAME...]            Clone missing repositories
   repo status [NAME...] [--json]  Inspect local repositories
-  repo sync [NAME...] [--dry-run] Fast-forward clean repositories
+  repo sync [NAME...] [--dry-run] Download remote fast-forwards into clean repositories
+  repo save NAME --message TEXT   Commit local changes and push the tracked branch
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
@@ -859,11 +927,12 @@ Global options (must precede COMMAND):
 
 const workspaceUsage = "Usage: asc workspace\n"
 const doctorUsage = "Usage: asc doctor [--json]\n"
-const repoUsage = "Usage: asc repo {list|clone|status|sync} [OPTIONS] [REPOSITORY...]\n"
+const repoUsage = "Usage: asc repo {list|clone|status|sync|save} [OPTIONS] [REPOSITORY...]\n"
 const repoListUsage = "Usage: asc repo list [--json]\n"
 const repoCloneUsage = "Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n"
 const repoStatusUsage = "Usage: asc repo status [REPOSITORY...] [--json]\n"
 const repoSyncUsage = "Usage: asc repo sync [REPOSITORY...] [--dry-run]\n"
+const repoSaveUsage = "Usage: asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]\n"
 const completionUsage = "Usage: asc completion bash\n"
 const updateUsage = "Usage: asc update [--check] [--yes] [--prefix PATH]\n"
 const cmakeGroupUsage = `Usage: asc cmake COMMAND [OPTIONS]

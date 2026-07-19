@@ -123,6 +123,13 @@ func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 	if code != ExitFailure || stdout != "" || !strings.Contains(stderr, "no published asc release") {
 		t.Fatalf("update without release = %d, %q, %q", code, stdout, stderr)
 	}
+	code, stdout, stderr = runApp(t, []string{"repo", "save", "--help"}, nil, nil, nil)
+	if code != ExitSuccess || !strings.Contains(stdout, "--message") || stderr != "" {
+		t.Fatalf("repo save help = %d, %q, %q", code, stdout, stderr)
+	}
+	if repository, message, dryRun, yes, err := parseRepoSave([]string{"asc-one", "--message", "Save work", "--dry-run", "--yes"}); err != nil || repository != "asc-one" || message != "Save work" || !dryRun || !yes {
+		t.Fatalf("parseRepoSave() = %q, %q, %v, %v, %v", repository, message, dryRun, yes, err)
+	}
 }
 
 func TestWorkspaceHasNoNetworkOrDiagnostics(t *testing.T) {

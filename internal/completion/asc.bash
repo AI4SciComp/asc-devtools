@@ -10,7 +10,7 @@ _asc_completion() {
   if [[ ${COMP_CWORD} -eq 1 ]]; then
     choices="doctor workspace repo cmake configure build test update completion --help --version --config --organization --workspace --no-color"
 	elif [[ ${command} == repo && ${COMP_CWORD} -eq 2 ]]; then
-		choices="list clone status sync"
+		choices="list clone status sync save"
 	elif [[ ${command} == cmake && ${COMP_CWORD} -eq 2 ]]; then
 		choices="configure build test workflow presets vendor"
 	elif [[ ${command} == cmake && ${repo_command} == vendor && ${COMP_CWORD} -eq 3 ]]; then

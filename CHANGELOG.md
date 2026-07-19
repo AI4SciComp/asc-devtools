@@ -14,6 +14,9 @@ This project follows Keep a Changelog and Semantic Versioning.
 - Top-level `asc update` with a read-only check mode, release checksum
   verification, safe archive extraction, managed-install protection, and a
   deterministic Go release-packaging helper.
+- Guarded `asc repo save` for reviewed add/commit/push workflows, with dry-run,
+  confirmation, remote-ahead/divergence refusal, and preserved local commits on
+  push failure; sync output now states that it is download-only.
 
 ### Changed
 

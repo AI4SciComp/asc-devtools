@@ -25,7 +25,8 @@ Git identities. Vendor tests must never inspect or change real sibling checkouts
 Self-update tests must use local HTTP servers and temporary managed prefixes.
 
 Preserve argument-slice process execution, direct-child containment, token
-redaction, bounded HTTP reads, and fast-forward-only sync. Do not introduce
+redaction, bounded HTTP reads, and fast-forward-only sync. Commit and push are
+allowed only inside the reviewed `repo save` transaction; do not introduce other
 commands that discard work, rewrite history, commit, push, or publish.
 
 Update tests and command documentation with behavior changes. Contributions are

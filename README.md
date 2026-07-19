@@ -7,8 +7,9 @@ repositories through the GitHub REST API, clones missing worktrees, reports Git
 state, performs fast-forward-only updates, and invokes repository-owned CMake
 presets.
 
-This is developer infrastructure. It does not commit, push, change branches,
-publish releases, orchestrate agents, or implement scientific models.
+This is developer infrastructure. It changes remote Git state only through the
+explicit, reviewed `repo save` workflow. It does not change branches, publish
+releases, orchestrate agents, or implement scientific models.
 
 This branch contains the Go implementation. Equivalent Python and Bash variants
 are maintained on the `python` and `shell`
@@ -135,6 +136,8 @@ asc repo status
 asc repo status --json
 asc repo sync --dry-run
 asc repo sync
+asc repo save asc-cpp --message "Describe the change" --dry-run
+asc repo save asc-cpp --message "Describe the change"
 asc update --check
 asc configure asc-cpp --preset dev
 asc build asc-cpp --preset dev
@@ -158,6 +161,13 @@ installer used above. It never invokes `sudo` itself.
 Clone without names processes every eligible API repository. Status and sync
 without names process managed Git worktrees that are direct workspace children.
 
+`repo sync` is download-only: it fetches and fast-forwards clean worktrees from
+their upstream branches. `repo save` is upload-only and intentionally operates
+on exactly one repository: it reviews a plan, fetches to detect remote changes,
+stages all local changes, commits with the required message, and pushes the
+tracked branch. It refuses remote-ahead, diverged, detached, conflicted, or
+untracked-branch states.
+
 ## Safety guarantees
 
 - External commands use `os/exec` argument slices; no shell evaluates input.
@@ -168,8 +178,11 @@ without names process managed Git worktrees that are direct workspace children.
 - Status is local, read-only, nonrecursive, and uses porcelain-v2 output.
 - Sync skips dirty, detached, no-upstream, wrong-remote, and divergent states.
 - Sync performs only fetch plus `merge --ff-only`; dry-run performs neither.
-- There is no reset, clean, stash, rebase, checkout, commit, push, force
-  operation, telemetry, or credential storage.
+- Save requires one repository and an explicit message, supports a read-only
+  plan, prompts by default, fetches before staging, and preserves a local commit
+  if push fails.
+- Outside `repo save`, there is no reset, clean, stash, rebase, checkout, commit,
+  push, force operation, telemetry, or credential storage.
 - Vendoring reads only a local `asc-cmake` checkout, verifies exact SHA-256
   content, refuses locally modified managed files, and preserves unmanaged files.
 - GitHub responses and error bodies have size limits and HTTP requests time out.
