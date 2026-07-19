@@ -112,8 +112,14 @@ asc_update_compare_versions() {
   for ((index = 0; index < width; index++)); do
     left=$((10#${current_parts[index]:-0}))
     right=$((10#${latest_parts[index]:-0}))
-    if ((left < right)); then ASC_UPDATE_COMPARISON=-1; return 0; fi
-    if ((left > right)); then ASC_UPDATE_COMPARISON=1; return 0; fi
+    if ((left < right)); then
+      ASC_UPDATE_COMPARISON=-1
+      return 0
+    fi
+    if ((left > right)); then
+      ASC_UPDATE_COMPARISON=1
+      return 0
+    fi
   done
 }
 
@@ -274,17 +280,45 @@ asc_update_run() {
   fi
   sums="${temporary}/SHA256SUMS"
   archive="${temporary}/${ASC_UPDATE_ARCHIVE}"
-  asc_update_download "${ASC_UPDATE_SUMS_URL}" application/octet-stream "${sums}" 1048576 "${headers}" || { rm -r -- "${temporary}"; return 1; }
-  [[ "${ASC_UPDATE_HTTP_STATUS}" =~ ^2[0-9][0-9]$ ]] || { asc_error "download SHA256SUMS returned ${ASC_UPDATE_HTTP_STATUS}"; rm -r -- "${temporary}"; return 1; }
-  asc_update_expected_checksum "${sums}" || { rm -r -- "${temporary}"; return 1; }
-  asc_update_download "${ASC_UPDATE_ARCHIVE_URL}" application/octet-stream "${archive}" 134217728 "${headers}" || { rm -r -- "${temporary}"; return 1; }
-  [[ "${ASC_UPDATE_HTTP_STATUS}" =~ ^2[0-9][0-9]$ ]] || { asc_error "download ${ASC_UPDATE_ARCHIVE} returned ${ASC_UPDATE_HTTP_STATUS}"; rm -r -- "${temporary}"; return 1; }
+  asc_update_download "${ASC_UPDATE_SUMS_URL}" application/octet-stream "${sums}" 1048576 "${headers}" || {
+    rm -r -- "${temporary}"
+    return 1
+  }
+  [[ "${ASC_UPDATE_HTTP_STATUS}" =~ ^2[0-9][0-9]$ ]] || {
+    asc_error "download SHA256SUMS returned ${ASC_UPDATE_HTTP_STATUS}"
+    rm -r -- "${temporary}"
+    return 1
+  }
+  asc_update_expected_checksum "${sums}" || {
+    rm -r -- "${temporary}"
+    return 1
+  }
+  asc_update_download "${ASC_UPDATE_ARCHIVE_URL}" application/octet-stream "${archive}" 134217728 "${headers}" || {
+    rm -r -- "${temporary}"
+    return 1
+  }
+  [[ "${ASC_UPDATE_HTTP_STATUS}" =~ ^2[0-9][0-9]$ ]] || {
+    asc_error "download ${ASC_UPDATE_ARCHIVE} returned ${ASC_UPDATE_HTTP_STATUS}"
+    rm -r -- "${temporary}"
+    return 1
+  }
   actual=$(sha256sum -- "${archive}")
   actual="${actual%% *}"
-  [[ "${actual}" == "${ASC_UPDATE_EXPECTED_HASH}" ]] || { asc_error "checksum mismatch for ${ASC_UPDATE_ARCHIVE}"; rm -r -- "${temporary}"; return 1; }
-  asc_update_extract "${archive}" "${temporary}/bundle" || { rm -r -- "${temporary}"; return 1; }
+  [[ "${actual}" == "${ASC_UPDATE_EXPECTED_HASH}" ]] || {
+    asc_error "checksum mismatch for ${ASC_UPDATE_ARCHIVE}"
+    rm -r -- "${temporary}"
+    return 1
+  }
+  asc_update_extract "${archive}" "${temporary}/bundle" || {
+    rm -r -- "${temporary}"
+    return 1
+  }
   root="${temporary}/bundle/${ASC_UPDATE_ROOT}"
-  [[ -f "${root}/scripts/install.sh" && ! -L "${root}/scripts/install.sh" ]] || { asc_error "release bundle is missing a regular installer"; rm -r -- "${temporary}"; return 1; }
+  [[ -f "${root}/scripts/install.sh" && ! -L "${root}/scripts/install.sh" ]] || {
+    asc_error "release bundle is missing a regular installer"
+    rm -r -- "${temporary}"
+    return 1
+  }
   if ! bundle_version_output=$("${root}/bin/asc" --version) || [[ "${bundle_version_output}" != "asc ${ASC_UPDATE_VERSION}" ]]; then
     asc_error "release bundle version does not match release ${ASC_UPDATE_VERSION}"
     rm -r -- "${temporary}"
