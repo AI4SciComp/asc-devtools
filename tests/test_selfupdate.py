@@ -73,9 +73,7 @@ class SelfUpdateTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             prefix = Path(directory)
-            manifest = (
-                prefix / "share" / "asc-devtools" / "install-manifest.json"
-            )
+            manifest = prefix / "share" / "asc-devtools" / "install-manifest.json"
             manifest.parent.mkdir(parents=True)
             manifest.write_text("{}\n", encoding="utf-8")
             calls: list[Sequence[str]] = []
@@ -99,14 +97,14 @@ class SelfUpdateTest(unittest.TestCase):
             return 404, {}, b""
 
         with self.assertRaisesRegex(AscError, "no published asc release"):
-            run_update(
-                current_version="0.1.0", check_only=True, transport=missing
-            )
+            run_update(current_version="0.1.0", check_only=True, transport=missing)
 
         unsafe = archive({"../outside": (b"bad", 0o644)})
-        with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(AscError, "unsafe or unexpected"):
-                _extract(unsafe, Path(directory) / "bundle")
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            self.assertRaisesRegex(AscError, "unsafe or unexpected"),
+        ):
+            _extract(unsafe, Path(directory) / "bundle")
 
 
 if __name__ == "__main__":

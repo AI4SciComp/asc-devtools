@@ -443,7 +443,8 @@ def vendor_plan(
         _, modified = _inspect(target, old)
         if modified:
             raise RepositoryError(
-                "locally modified managed vendored files must be resolved before planning"
+                "locally modified managed vendored files must be resolved "
+                "before planning"
             )
     previous = {record.path: record for record in old.files} if old else {}
     actions: list[VendorAction] = []
@@ -452,7 +453,9 @@ def vendor_plan(
         action = (
             "add"
             if prior is None
-            else "preserve" if prior.sha256 == record.sha256 else "replace"
+            else "preserve"
+            if prior.sha256 == record.sha256
+            else "replace"
         )
         actions.append(VendorAction(record.path, action))
     actions.extend(VendorAction(path, "remove") for path in previous)
