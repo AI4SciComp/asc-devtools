@@ -69,7 +69,7 @@ func (s Service) Run(ctx context.Context) []Check {
 	if _, err := lookup("asc"); err == nil {
 		checks = append(checks, Check{Name: "path", Status: "pass", Detail: "asc is available on PATH"})
 	} else {
-		checks = append(checks, Check{Name: "path", Status: "warning", Detail: "asc is not available on PATH", Remedy: "install the binary into ~/.local/bin and add it to PATH"})
+		checks = append(checks, Check{Name: "path", Status: "warning", Detail: "asc is not available on PATH", Remedy: "install asc under /usr/local/bin"})
 	}
 	return checks
 }

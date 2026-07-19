@@ -16,7 +16,8 @@ trap cleanup EXIT
 
 if [[ -z "${binary}" ]]; then
 	temporary_binary=$(mktemp "${TMPDIR:-/tmp}/asc-install-binary.XXXXXXXX")
-	(cd -- "${project_root}" && CGO_ENABLED=0 go build -trimpath -o "${temporary_binary}" ./cmd/asc)
+	(cd -- "${project_root}" && CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+		-ldflags "-s -w -X main.version=0.1.0" -o "${temporary_binary}" ./cmd/asc)
 	binary="${temporary_binary}"
 fi
 

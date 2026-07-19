@@ -1,4 +1,18 @@
-# Codex Implementation Prompt: Dependency-Free Go `AI4SciComp/asc-devtools`
+# Generator Prompt: Dependency-Free Go `AI4SciComp/asc-devtools`
+
+## Authoritative lifecycle addendum
+
+Generate the maintained command contract represented by the implementation,
+tests, README, and `docs/commands.md`. These requirements override conflicting
+older examples below:
+
+- default installation to `/usr/local`, with `--prefix` and `DESTDIR` staging;
+- install a static executable plus completion using a SHA-256 manifest;
+- use `-buildvcs=false`, `-trimpath`, and an explicit release version for
+  reproducible installer builds that do not depend on Git metadata;
+- provide an exact-file, hash-verified uninstaller that never recursively
+  removes an installation prefix;
+- recommend `/usr/local/bin` in diagnostics and installation documentation.
 
 You are the principal engineer responsible for implementing the existing GitHub
 repository `AI4SciComp/asc-devtools` as a small, dependable developer CLI.

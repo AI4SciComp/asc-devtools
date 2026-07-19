@@ -10,9 +10,9 @@ presets.
 This is developer infrastructure. It does not commit, push, change branches,
 publish releases, orchestrate agents, or implement scientific models.
 
-Earlier implementations are preserved for reference under
-[`legacies/python`](legacies/python) and [`legacies/shell`](legacies/shell). They
-are not active runtime or CI dependencies.
+This branch contains the Go implementation. Equivalent Python and Bash variants
+are maintained on the `implementation/python` and `implementation/shell`
+branches. The implementation specification is preserved as `generator.md`.
 
 ## Requirements
 
@@ -29,7 +29,9 @@ manager.
 ## Build and install on WSL2
 
 ```bash
-CGO_ENABLED=0 go build -trimpath -o ./dist/asc ./cmd/asc
+CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+  -ldflags "-s -w -X main.version=0.1.0" \
+  -o ./dist/asc ./cmd/asc
 sudo ./scripts/install.sh --binary ./dist/asc
 asc --version
 ```

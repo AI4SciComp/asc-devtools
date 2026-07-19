@@ -55,5 +55,5 @@ stops after these checks. A real sync fetches the configured remote and attempts
 only `merge --ff-only`. Independent repository failures are accumulated and
 reported deterministically.
 
-The historical Python and Bash implementations under `legacies` are inert and
-excluded from the active build and CI package paths.
+Equivalent Python and Bash implementations are maintained on separate branches;
+this branch's build and CI paths contain Go only.

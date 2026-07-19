@@ -1,8 +1,0 @@
-# This is executable Bash syntax. Use only a trusted, user-owned copy.
-ASC_ORGANIZATION="AI4SciComp"
-ASC_WORKSPACE="${HOME}/projects/AI4SciComp"
-ASC_REPOSITORY_PREFIX="asc-"
-ASC_INCLUDE_DOT_GITHUB="true"
-ASC_CLONE_PROTOCOL="ssh"
-ASC_REMOTE="origin"
-

@@ -121,7 +121,8 @@ project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 if [[ -z "${binary}" ]]; then
 	command -v go >/dev/null 2>&1 || fail "Go is required when --binary is not supplied"
 	temporary_binary=$(mktemp "${TMPDIR:-/tmp}/asc-build.XXXXXXXX")
-	(cd -- "${project_root}" && CGO_ENABLED=0 go build -trimpath -o "${temporary_binary}" ./cmd/asc)
+	(cd -- "${project_root}" && CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+		-ldflags "-s -w -X main.version=0.1.0" -o "${temporary_binary}" ./cmd/asc)
 	binary="${temporary_binary}"
 fi
 [[ -f "${binary}" && ! -L "${binary}" && -x "${binary}" ]] ||

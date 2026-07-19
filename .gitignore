@@ -9,9 +9,3 @@
 *~
 
 # Generated artifacts retained only inside historical snapshots.
-legacies/python/.mypy_cache/
-legacies/python/.ruff_cache/
-legacies/python/build/
-legacies/python/dist/
-legacies/python/**/*.egg-info/
-legacies/python/**/__pycache__/

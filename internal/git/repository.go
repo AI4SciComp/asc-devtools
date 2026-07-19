@@ -33,9 +33,9 @@ type Operation struct {
 // Status is the stable repository status representation.
 type Status struct {
 	Name     string `json:"name"`
-	Branch   string `json:"branch,omitempty"`
+	Branch   string `json:"branch"`
 	Detached bool   `json:"detached"`
-	Upstream string `json:"upstream,omitempty"`
+	Upstream string `json:"upstream"`
 	Ahead    int    `json:"ahead"`
 	Behind   int    `json:"behind"`
 	Clean    bool   `json:"clean"`

@@ -25,8 +25,8 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
-- Moved the former Bash implementation to `legacies/shell`; the earlier Python
-  implementation remains under `legacies/python`.
+- Published the Go implementation independently from the equivalent Python and
+  Bash variants.
 
 [Unreleased]: https://github.com/AI4SciComp/asc-devtools/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/AI4SciComp/asc-devtools/releases/tag/v0.1.0

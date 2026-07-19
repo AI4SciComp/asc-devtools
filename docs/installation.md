@@ -24,7 +24,7 @@ is missing.
 Go 1.25 or newer is required to build:
 
 ```bash
-CGO_ENABLED=0 go build -trimpath \
+CGO_ENABLED=0 go build -buildvcs=false -trimpath \
   -ldflags "-s -w -X main.version=0.1.0" \
   -o ./dist/asc ./cmd/asc
 sudo ./scripts/install.sh --binary ./dist/asc
