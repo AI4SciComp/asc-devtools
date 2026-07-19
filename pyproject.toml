@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asc-devtools"
+version = "0.1.0"
+description = "Safe local development tools for AI4SciComp repositories"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [{name = "AI4SciComp"}]
+keywords = ["AI4SciComp", "developer-tools", "GitHub", "CMake"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2,<2",
+  "mypy>=1.10,<2",
+  "ruff>=0.5,<1",
+]
+
+[project.scripts]
+asc = "asc_devtools.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/AI4SciComp/asc-devtools"
+Issues = "https://github.com/AI4SciComp/asc-devtools/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["asc_devtools"]
+mypy_path = "src"

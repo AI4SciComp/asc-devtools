@@ -1,0 +1,8 @@
+{
+  "organization": "AI4SciComp",
+  "workspace": "~/projects/AI4SciComp",
+  "repositoryPrefix": "asc-",
+  "includeDotGitHub": true,
+  "cloneProtocol": "ssh",
+  "remote": "origin"
+}
