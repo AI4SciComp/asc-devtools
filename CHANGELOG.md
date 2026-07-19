@@ -11,10 +11,18 @@ All notable changes to this project are documented here. The format follows
 - Matched the Go command, JSON configuration, direct REST, Git safety, required
   preset, diagnostics, completion, and exit-code contracts.
 - Published this implementation independently on `python`.
+- Updated descriptive repository topology to `asc-xde` and `asc-lab` while
+  preserving dynamic API discovery.
 
 ### Added
 
 - `/usr/local` hash-manifest installation and safe uninstall support.
+- Grouped CMake workflow/preset commands and compatible top-level aliases.
+- Local-only asc-cmake vendor status, deterministic plan, and guarded apply with
+  strict SHA-256 manifests, source validation, staging, and rollback.
+- Top-level `asc update` with a read-only check mode, release checksum
+  verification, safe archive extraction, managed-install protection, and a
+  deterministic Python release-packaging helper.
 
 ## [0.1.0] - 2026-07-19
 

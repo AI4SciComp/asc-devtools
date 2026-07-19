@@ -57,6 +57,30 @@ def _tool_check(runner: CommandRunner, name: str, required: bool) -> Check:
         )
 
 
+def _vendor_source_check(config: Config, runner: CommandRunner) -> Check:
+    path = config.workspace / config.cmake.source_repository
+    if not path.exists():
+        return Check(
+            "asc-cmake-source",
+            "warning",
+            f"{path} is not checked out",
+            "clone asc-cmake before using vendor commands",
+        )
+    if path.is_symlink() or not path.is_dir():
+        return Check(
+            "asc-cmake-source", "warning", f"{path} is not a regular directory"
+        )
+    try:
+        result = runner.run(
+            ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"]
+        )
+    except ProcessError as error:
+        return Check("asc-cmake-source", "warning", str(error))
+    if result.stdout.strip() != "true":
+        return Check("asc-cmake-source", "warning", f"{path} is not a Git worktree")
+    return Check("asc-cmake-source", "pass", f"{path} is available")
+
+
 def run_doctor(
     config: Config,
     runner: CommandRunner,
@@ -73,6 +97,7 @@ def run_doctor(
         _tool_check(runner, "git", True),
         _tool_check(runner, "cmake", False),
         _tool_check(runner, "ctest", False),
+        _vendor_source_check(config, runner),
     ]
     if shutil.which("gh"):
         checks.append(Check("gh", "pass", "optional GitHub CLI is available"))

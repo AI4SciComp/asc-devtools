@@ -49,7 +49,11 @@ The default file is `~/.config/asc/config.json`:
   "repositoryPrefix": "asc-",
   "includeDotGitHub": true,
   "cloneProtocol": "ssh",
-  "remote": "origin"
+  "remote": "origin",
+  "cmake": {
+    "vendorDirectory": "cmake/asc",
+    "sourceRepository": "asc-cmake"
+  }
 }
 ```
 
@@ -75,11 +79,25 @@ asc repo status
 asc repo status --json
 asc repo sync --dry-run
 asc repo sync
+asc update --check
 asc configure asc-cpp --preset dev
 asc build asc-cpp --preset dev
 asc test asc-cpp --preset dev
+asc cmake workflow asc-cpp \
+  --configure-preset dev --build-preset dev --test-preset dev
+asc cmake presets asc-cpp --json
+asc cmake vendor status asc-cpp
+asc cmake vendor plan asc-cpp
+asc cmake vendor apply asc-cpp --yes
 source <(asc completion bash)
 ```
+
+`asc update` checks the latest GitHub release and updates the currently managed
+installation after confirmation. Use `asc update --check` for a read-only check,
+or `sudo asc update --yes` when the installation prefix requires root access.
+The updater downloads `asc-devtools-python.tar.gz` plus `SHA256SUMS`, verifies
+the archive, and runs the same hash-guarded installer used above. It never invokes
+`sudo` itself.
 
 Global options must precede the command: `--config`, `--organization`,
 `--workspace`, and `--no-color`. See [commands.md](docs/commands.md) for schemas,
@@ -94,6 +112,8 @@ exit codes, and exact external commands.
 - Sync skips dirty, detached, missing-upstream, wrong-remote, and divergent work.
 - Sync runs only `fetch` and `merge --ff-only`; dry-run runs neither.
 - There is no reset, clean, stash, rebase, checkout, commit, push, or force path.
+- Vendoring is local-only, verifies SHA-256 manifests, refuses modified managed
+  files and dirty sources, and preserves unmanaged files.
 - REST requests have time and response-size limits; error bodies are not echoed.
 
 ## Development
@@ -108,5 +128,11 @@ python3 -m compileall -q src tests scripts
 
 Tests use local fakes and temporary Git repositories. They do not access live
 GitHub, credentials, user configuration, or the developer workspace.
+
+The current API-discovered workspace includes `asc-devtools`, `asc-cmake`,
+`asc-cpp`, `asc-xde`, `asc-kinetic`, `asc-lean`, and `asc-lab`, plus optional
+`.github`; this list is descriptive, not hard-coded. Each consumer owns
+`CMakePresets.json`. `asc-cmake` supports offline reproducible vendoring, but
+configure never updates it automatically and users review and commit changes.
 
 Licensed under Apache-2.0. See [LICENSE](LICENSE).

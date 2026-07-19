@@ -35,4 +35,30 @@ The versioned manifest records every relative path and SHA-256 hash. Upgrade and
 uninstall refuse missing manifests, symlinks, changed files, or unexpected file
 sets. Removal never recursively deletes a prefix.
 
+## Self-update
+
+```bash
+asc update --check
+asc update
+asc update --yes
+sudo asc update --yes  # for a root-owned /usr/local installation
+```
+
+The command infers the prefix from the installed module layout; pass
+`--prefix /opt/asc` when needed. It downloads `asc-devtools-python.tar.gz` and
+`SHA256SUMS` from the latest GitHub release, verifies the hash, safely extracts
+the bundle, and calls the normal installer. It refuses unmanaged or locally
+modified installations and never invokes `sudo`.
+
+Release maintainers create the update bundle with:
+
+```bash
+./scripts/package_update.sh --output ./dist/release
+```
+
+Upload the resulting archive and `SHA256SUMS` as assets on the same release.
+The source version in the bundle must match the release tag.
+
 Verify with `asc --version`, `asc --help`, and `asc doctor`.
+Installation does not vendor CMake modules. Clone `asc-cmake`, run
+`asc cmake vendor plan REPOSITORY`, and review the plan before explicit apply.

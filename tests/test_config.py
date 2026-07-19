@@ -21,6 +21,8 @@ class ConfigTest(unittest.TestCase):
         )
         self.assertEqual(config.workspace, Path("/home/tester/projects/AI4SciComp"))
         self.assertEqual(config.remote, "origin")
+        self.assertEqual(config.cmake.vendor_directory, "cmake/asc")
+        self.assertEqual(config.cmake.source_repository, "asc-cmake")
 
     def test_json_environment_and_cli_precedence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -89,6 +91,31 @@ class ConfigTest(unittest.TestCase):
             load_config(environment={"ASC_WORKSPACE": "/"})
         with self.assertRaisesRegex(ConfigurationError, "must be 'true' or 'false'"):
             load_config(environment={"ASC_INCLUDE_DOT_GITHUB": "yes"})
+
+    def test_cmake_configuration_is_nested_and_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "config.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "cmake": {
+                            "vendorDirectory": "vendor/asc",
+                            "sourceRepository": "asc-cmake-local",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = load_config(path, environment={})
+            self.assertEqual(config.cmake.vendor_directory, "vendor/asc")
+            self.assertEqual(config.cmake.source_repository, "asc-cmake-local")
+            for value in (
+                {"cmake": {"unknown": True}},
+                {"cmake": {"vendorDirectory": "../escape"}},
+            ):
+                path.write_text(json.dumps(value), encoding="utf-8")
+                with self.assertRaises(ConfigurationError):
+                    load_config(path, environment={})
 
 
 if __name__ == "__main__":

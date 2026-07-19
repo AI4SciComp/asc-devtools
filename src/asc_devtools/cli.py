@@ -11,7 +11,7 @@ from dataclasses import replace
 from typing import NoReturn, TextIO
 
 from asc_devtools import __version__
-from asc_devtools.commands.cmake import run_cmake_command
+from asc_devtools.commands.cmake import list_presets, run_cmake_command, run_workflow
 from asc_devtools.commands.doctor import run_doctor
 from asc_devtools.completion import BASH_COMPLETION
 from asc_devtools.config import Config, ConfigOverrides, load_config
@@ -29,6 +29,12 @@ from asc_devtools.repositories import (
     operations_failed,
     sync_repositories,
 )
+from asc_devtools.selfupdate import (
+    Transport as UpdateTransport,
+    default_transport as default_update_transport,
+    run_update,
+)
+from asc_devtools.vendor import VendorPlan, vendor_apply, vendor_plan, vendor_status
 
 GLOBAL_USAGE = """Usage: asc [GLOBAL OPTIONS] COMMAND [ARGS]
 
@@ -44,6 +50,8 @@ Commands:
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
+  cmake COMMAND ...               CMake workflows and local vendoring
+  update [--check] [--yes]        Update asc to the latest release
   completion bash                 Print Bash completion
 
 Global options (must precede COMMAND):
@@ -63,10 +71,21 @@ USAGE = {
     "repo clone": "Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n",
     "repo status": "Usage: asc repo status [REPOSITORY...] [--json]\n",
     "repo sync": "Usage: asc repo sync [REPOSITORY...] [--dry-run]\n",
+    "update": "Usage: asc update [--check] [--yes] [--prefix PATH]\n",
     "completion": "Usage: asc completion bash\n",
     "configure": "Usage: asc configure REPOSITORY --preset PRESET\n",
     "build": "Usage: asc build REPOSITORY --preset PRESET\n",
     "test": "Usage: asc test REPOSITORY --preset PRESET\n",
+    "cmake": "Usage: asc cmake {configure|build|test|workflow|presets|vendor} ...\n",
+    "cmake configure": "Usage: asc cmake configure REPOSITORY --preset PRESET\n",
+    "cmake build": "Usage: asc cmake build REPOSITORY --preset PRESET [--target TARGET]...\n",
+    "cmake test": "Usage: asc cmake test REPOSITORY --preset PRESET [--label LABEL] [--output-on-failure]\n",
+    "cmake workflow": "Usage: asc cmake workflow REPOSITORY --configure-preset PRESET --build-preset PRESET --test-preset PRESET\n",
+    "cmake presets": "Usage: asc cmake presets REPOSITORY [--json]\n",
+    "cmake vendor": "Usage: asc cmake vendor {status|plan|apply} ...\n",
+    "cmake vendor status": "Usage: asc cmake vendor status REPOSITORY [--json]\n",
+    "cmake vendor plan": "Usage: asc cmake vendor plan REPOSITORY [--source PATH] [--ref REF] [--json]\n",
+    "cmake vendor apply": "Usage: asc cmake vendor apply REPOSITORY [--source PATH] [--ref REF] [--yes]\n",
 }
 
 
@@ -118,10 +137,56 @@ def _parser() -> Parser:
     sync.add_argument("--dry-run", action="store_true")
     _help_flag(sync)
 
+    update = commands.add_parser("update", add_help=False)
+    update.add_argument("--check", action="store_true")
+    update.add_argument("--yes", action="store_true")
+    update.add_argument("--prefix", default="")
+    _help_flag(update)
+
     for name in ("configure", "build", "test"):
         child = commands.add_parser(name, add_help=False)
         child.add_argument("repository", nargs="?")
         child.add_argument("--preset")
+        _help_flag(child)
+    cmake = commands.add_parser("cmake", add_help=False)
+    _help_flag(cmake)
+    cmake_commands = cmake.add_subparsers(dest="cmake_command")
+    for name in ("configure", "build", "test"):
+        child = cmake_commands.add_parser(name, add_help=False)
+        child.add_argument("repository", nargs="?")
+        child.add_argument("--preset")
+        if name == "build":
+            child.add_argument("--target", action="append", default=[])
+        if name == "test":
+            child.add_argument("--label", default="")
+            child.add_argument("--output-on-failure", action="store_true")
+        _help_flag(child)
+    workflow = cmake_commands.add_parser("workflow", add_help=False)
+    workflow.add_argument("repository", nargs="?")
+    workflow.add_argument("--configure-preset")
+    workflow.add_argument("--build-preset")
+    workflow.add_argument("--test-preset")
+    _help_flag(workflow)
+    presets = cmake_commands.add_parser("presets", add_help=False)
+    presets.add_argument("repository", nargs="?")
+    presets.add_argument("--json", action="store_true")
+    _help_flag(presets)
+    vendor = cmake_commands.add_parser("vendor", add_help=False)
+    _help_flag(vendor)
+    vendor_commands = vendor.add_subparsers(dest="vendor_command")
+    vendor_status_parser = vendor_commands.add_parser("status", add_help=False)
+    vendor_status_parser.add_argument("repository", nargs="?")
+    vendor_status_parser.add_argument("--json", action="store_true")
+    _help_flag(vendor_status_parser)
+    for name in ("plan", "apply"):
+        child = vendor_commands.add_parser(name, add_help=False)
+        child.add_argument("repository", nargs="?")
+        child.add_argument("--source", default="")
+        child.add_argument("--ref", default="")
+        if name == "plan":
+            child.add_argument("--json", action="store_true")
+        else:
+            child.add_argument("--yes", action="store_true")
         _help_flag(child)
     completion = commands.add_parser("completion", add_help=False)
     completion.add_argument("shell", nargs="?")
@@ -135,6 +200,11 @@ def _requested_help(arguments: argparse.Namespace) -> str | None:
             return GLOBAL_USAGE
         if arguments.command == "repo" and arguments.repo_command:
             return USAGE[f"repo {arguments.repo_command}"]
+        if arguments.command == "cmake":
+            if arguments.cmake_command == "vendor" and arguments.vendor_command:
+                return USAGE[f"cmake vendor {arguments.vendor_command}"]
+            if arguments.cmake_command:
+                return USAGE[f"cmake {arguments.cmake_command}"]
         return USAGE[arguments.command]
     return None
 
@@ -163,17 +233,26 @@ def _print_operations(results: Sequence[OperationResult], output: TextIO) -> Non
     )
 
 
+def _print_vendor_plan(plan: VendorPlan, output: TextIO) -> None:
+    print(f"asc-cmake {plan.version} ({plan.commit}) -> {plan.repository}", file=output)
+    for action in plan.actions:
+        print(f"  {action.action}\t{action.path}", file=output)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
     output: TextIO | None = None,
     error_output: TextIO | None = None,
+    input_stream: TextIO | None = None,
     runner: CommandRunner | None = None,
     github_client_factory: Callable[[str], GitHubClient] | None = None,
+    update_transport: UpdateTransport | None = None,
 ) -> int:
     """Run asc and return its documented exit code."""
     output = output or sys.stdout
     error_output = error_output or sys.stderr
+    input_stream = input_stream or sys.stdin
     runner = runner or CommandRunner()
     raw_arguments = list(sys.argv[1:] if argv is None else argv)
     try:
@@ -189,6 +268,14 @@ def main(
             raise UsageError("a command is required")
         if arguments.command == "repo" and arguments.repo_command is None:
             raise UsageError("a repo command is required")
+        if arguments.command == "cmake" and arguments.cmake_command is None:
+            raise UsageError("a cmake command is required")
+        if (
+            arguments.command == "cmake"
+            and arguments.cmake_command == "vendor"
+            and arguments.vendor_command is None
+        ):
+            raise UsageError("a vendor command is required")
         config = load_config(
             arguments.config,
             overrides=ConfigOverrides(
@@ -213,6 +300,20 @@ def main(
                 json_output=arguments.json,
                 client=client,
             )
+        if arguments.command == "update":
+            config, client = _resolved_client(config, runner, github_client_factory)
+            run_update(
+                current_version=__version__,
+                token=config.github_token,
+                base_url=client.base_url,
+                prefix=arguments.prefix,
+                check_only=arguments.check,
+                assume_yes=arguments.yes,
+                input_stream=input_stream,
+                output=output,
+                transport=update_transport or default_update_transport,
+            )
+            return 0
         if arguments.command == "repo":
             if arguments.repo_command in {"list", "clone"}:
                 config, client = _resolved_client(config, runner, github_client_factory)
@@ -277,6 +378,98 @@ def main(
             )
             _print_operations(results, output)
             return 1 if operations_failed(results) else 0
+        if arguments.command == "cmake":
+            if not arguments.repository:
+                raise UsageError(
+                    f"cmake {arguments.cmake_command} requires a repository"
+                )
+            if arguments.cmake_command in {"configure", "build", "test"}:
+                if not arguments.preset:
+                    raise UsageError("repository and --preset are required")
+                run_cmake_command(
+                    config,
+                    runner,
+                    arguments.cmake_command,
+                    arguments.repository,
+                    arguments.preset,
+                    targets=getattr(arguments, "target", ()),
+                    label=getattr(arguments, "label", ""),
+                    output_on_failure=getattr(arguments, "output_on_failure", False),
+                )
+                return 0
+            if arguments.cmake_command == "workflow":
+                if not all(
+                    (
+                        arguments.configure_preset,
+                        arguments.build_preset,
+                        arguments.test_preset,
+                    )
+                ):
+                    raise UsageError(
+                        "repository and all three workflow presets are required"
+                    )
+                run_workflow(
+                    config,
+                    runner,
+                    arguments.repository,
+                    arguments.configure_preset,
+                    arguments.build_preset,
+                    arguments.test_preset,
+                    error_output,
+                )
+                return 0
+            if arguments.cmake_command == "presets":
+                presets_result = list_presets(config, runner, arguments.repository)
+                if arguments.json:
+                    json.dump(presets_result, output, indent=2)
+                    print(file=output)
+                else:
+                    for group in ("configure", "build", "test"):
+                        for preset in presets_result[group]:
+                            print(f"{group}\t{preset}", file=output)
+                return 0
+            if arguments.vendor_command == "status":
+                status_result = vendor_status(config, runner, arguments.repository)
+                if arguments.json:
+                    json.dump(status_result.as_json(), output, indent=2)
+                    print(file=output)
+                else:
+                    detail = f": {status_result.detail}" if status_result.detail else ""
+                    print(
+                        f"{status_result.repository}: {status_result.state}{detail}",
+                        file=output,
+                    )
+                    for extra in status_result.extra_files:
+                        print(f"  extra: {extra}", file=output)
+                return 0
+            plan = vendor_plan(
+                config,
+                runner,
+                arguments.repository,
+                arguments.source,
+                arguments.ref,
+            )
+            if arguments.vendor_command == "plan":
+                if arguments.json:
+                    json.dump(plan.as_json(), output, indent=2)
+                    print(file=output)
+                else:
+                    _print_vendor_plan(plan, output)
+                return 0
+            if not arguments.yes:
+                _print_vendor_plan(plan, error_output)
+                print("Apply this exact plan? [y/N] ", end="", file=error_output)
+                answer = input_stream.readline().strip().lower()
+                if answer not in {"y", "yes"}:
+                    print("asc: vendor apply cancelled", file=error_output)
+                    return 1
+            vendor_apply(config, runner, plan)
+            _print_vendor_plan(plan, output)
+            print(
+                "Applied vendored asc-cmake files. Review with: git diff -- cmake/asc",
+                file=output,
+            )
+            return 0
         if not arguments.repository or not arguments.preset:
             raise UsageError("repository and --preset are required")
         run_cmake_command(
@@ -293,7 +486,12 @@ def main(
         return 2
     except ProcessError as error:
         print(f"asc: error: {error}", file=error_output)
-        if raw_arguments and raw_arguments[0] in {"configure", "build", "test"}:
+        if raw_arguments and raw_arguments[0] in {
+            "configure",
+            "build",
+            "test",
+            "cmake",
+        }:
             return error.return_code if 1 <= error.return_code <= 125 else 1
         return 1
     except AscError as error:

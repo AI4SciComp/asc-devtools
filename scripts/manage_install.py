@@ -22,6 +22,8 @@ PACKAGE_FILES = (
     "asc_devtools/github.py",
     "asc_devtools/process.py",
     "asc_devtools/repositories.py",
+    "asc_devtools/selfupdate.py",
+    "asc_devtools/vendor.py",
     "asc_devtools/commands/__init__.py",
     "asc_devtools/commands/cmake.py",
     "asc_devtools/commands/doctor.py",
@@ -86,8 +88,12 @@ def load_manifest(root: Path, prefix: Path, expected: set[str]) -> dict[str, str
     if document.get("prefix") != str(prefix):
         raise InstallError(f"manifest prefix does not match {prefix}")
     hashes = document.get("files")
-    if not isinstance(hashes, dict) or set(hashes) != expected:
-        raise InstallError(f"manifest file set does not match this asc version: {path}")
+    if (
+        not isinstance(hashes, dict)
+        or not hashes
+        or not set(hashes).issubset(expected)
+    ):
+        raise InstallError(f"manifest file set is not upgrade-compatible: {path}")
     if not all(
         isinstance(relative, str) and isinstance(value, str) and len(value) == 64
         for relative, value in hashes.items()

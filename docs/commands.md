@@ -43,6 +43,22 @@ JSON schema:
 Prints only the cleaned absolute workspace. It performs no network operation and
 does not require the workspace to exist.
 
+## `asc update [--check] [--yes] [--prefix PATH]`
+
+Queries `GET /repos/AI4SciComp/asc-devtools/releases/latest` and compares its
+numeric release tag with the running version. `--check` reports only; otherwise
+the command asks for confirmation unless `--yes` is supplied. The installed
+module layout normally identifies the prefix; it may instead be supplied as an
+absolute non-root path.
+
+The Python implementation downloads `asc-devtools-python.tar.gz` and
+`SHA256SUMS`, requires an exact SHA-256 match, rejects absolute paths, traversal,
+links, devices, and unexpected archive roots, then invokes the bundled installer.
+The existing installation manifest must be present and the installer
+independently refuses modified managed files. The command does not invoke
+`sudo`; run it with suitable permissions. A missing latest release or required
+asset is an operational error.
+
 ## `asc repo list [--json]`
 
 Pages through `GET /orgs/ORGANIZATION/repos?type=all&per_page=100&page=N`, then
@@ -96,21 +112,64 @@ failures return `1` after all independent repositories are processed.
 ## CMake commands
 
 ```text
-asc configure REPOSITORY --preset PRESET
-asc build REPOSITORY --preset PRESET
-asc test REPOSITORY --preset PRESET
+asc cmake configure REPOSITORY --preset PRESET
+asc cmake build REPOSITORY --preset PRESET [--target TARGET]...
+asc cmake test REPOSITORY --preset PRESET [--label LABEL] [--output-on-failure]
+asc cmake workflow REPOSITORY \
+  --configure-preset PRESET --build-preset PRESET --test-preset PRESET
+asc cmake presets REPOSITORY [--json]
 ```
 
-A preset is intentionally required; asc never guesses. The repository must have
-`CMakePresets.json` or `CMakeUserPresets.json`. `cmake --list-presets=TYPE`
-validates direct and included presets, then output streams from the repository
-root:
+Legacy top-level `asc configure`, `asc build`, and `asc test` remain compatible.
+Presets are explicit. Asc delegates listing and all inheritance/condition
+semantics to `cmake --list-presets`, `cmake --list-presets=build`, and
+`ctest --list-presets`. Configure/workflow require `CMakeLists.txt`; every
+operation runs from the validated direct-child Git worktree. Build targets and
+test filters produce exact argument arrays, never shell strings.
+
+Workflow prints each safely displayed command to stderr and stops on the first
+failed stage. It never synchronizes Git or updates vendored files. Preset JSON is:
+
+```json
+{"repository":"asc-cpp","configure":["dev"],"build":["dev"],"test":["dev"]}
+```
+
+## Local asc-cmake vendoring
 
 ```text
-cmake --preset PRESET
-cmake --build --preset PRESET
-ctest --preset PRESET
+asc cmake vendor status REPOSITORY [--json]
+asc cmake vendor plan REPOSITORY [--source PATH] [--ref REF] [--json]
+asc cmake vendor apply REPOSITORY [--source PATH] [--ref REF] [--yes]
 ```
+
+Vendoring only copies from the local sibling `<workspace>/asc-cmake` or an
+explicit local source. It validates Git worktree, optional origin, commit/ref,
+dirtiness, path containment, and regular nonsymlink files without fetch or
+checkout. Apply refuses dirty sources. Version precedence is `VERSION`, the
+CMake project version, then an exact Git tag.
+
+The default target is `cmake/asc`. A strict `distribution.json` enumerates exact
+relative files; the fallback allows only `LICENSE` and
+`modules/**/*.cmake`. `ASC_CMAKE_MANIFEST.json` is deterministic schema-v1 JSON
+with source, version, commit, sorted slash paths, and SHA-256 hashes; timestamps
+are omitted.
+
+Status values are `not-vendored`, `current`, `source-newer`,
+`locally-modified`, `manifest-invalid`, and `source-unavailable`. Extra unmanaged
+files are reported and preserved. Plan emits sorted add/replace/preserve/remove
+actions and refuses changed managed bytes. Apply prompts unless `--yes`,
+recomputes the exact approved plan, stages normal-permission files, writes the
+manifest last, and rolls back its own replacements on failure. It never invokes
+Git add/commit. Users review with `git diff -- cmake/asc` and commit themselves.
+
+Optional strict configuration is:
+
+```json
+{"cmake":{"vendorDirectory":"cmake/asc","sourceRepository":"asc-cmake"}}
+```
+
+Asc orchestrates but does not define CMake policy. Each consumer owns
+`CMakePresets.json`; configure never updates vendored modules automatically.
 
 ## `asc completion bash`
 
