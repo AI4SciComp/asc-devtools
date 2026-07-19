@@ -3,7 +3,7 @@
 ## Authoritative parity addendum
 
 Generate the Python branch with the same observable contract as the Go reference
-on `impl/go`. This addendum overrides conflicting details below:
+on `go`. This addendum overrides conflicting details below:
 
 - use strict `~/.config/asc/config.json` with camelCase keys and canonical CLI,
   environment, file, default precedence;
