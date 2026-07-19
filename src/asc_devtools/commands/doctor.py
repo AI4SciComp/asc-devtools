@@ -99,10 +99,6 @@ def run_doctor(
         _tool_check(runner, "ctest", False),
         _vendor_source_check(config, runner),
     ]
-    if shutil.which("gh"):
-        checks.append(Check("gh", "pass", "optional GitHub CLI is available"))
-    else:
-        checks.append(Check("gh", "warning", "optional GitHub CLI is not installed"))
     if config.github_token:
         checks.append(
             Check(

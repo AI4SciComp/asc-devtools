@@ -1,4 +1,4 @@
-"""Bounded GitHub REST discovery with optional GitHub CLI token fallback."""
+"""Bounded direct GitHub REST discovery."""
 
 from __future__ import annotations
 
@@ -10,8 +10,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from asc_devtools.config import Config
-from asc_devtools.errors import AscError, ProcessError
-from asc_devtools.process import CommandRunner
+from asc_devtools.errors import AscError
 
 MAX_RESPONSE_SIZE = 4 << 20
 
@@ -154,7 +153,7 @@ def _api_error(status: int, headers: Mapping[str, str]) -> str:
     if status == 401:
         return (
             "GitHub API authentication failed (401): configure "
-            "ASC_GITHUB_TOKEN or run gh auth login"
+            "ASC_GITHUB_TOKEN"
         )
     if status == 403 and headers.get("X-RateLimit-Remaining") == "0":
         return "GitHub API rate limit exceeded (403): authenticate or wait for reset"
@@ -166,18 +165,6 @@ def _api_error(status: int, headers: Mapping[str, str]) -> str:
             "organization and token access"
         )
     return f"GitHub API returned {status}"
-
-
-def token_with_optional_gh(config: Config, runner: CommandRunner) -> tuple[str, str]:
-    """Return the configured token or an optional silent ``gh auth token`` fallback."""
-    if config.github_token:
-        return config.github_token, config.github_token_source
-    try:
-        result = runner.run(["gh", "auth", "token"])
-    except ProcessError:
-        return "", ""
-    token = result.stdout.strip()
-    return (token, "gh auth token") if token else ("", "")
 
 
 def filter_managed(
@@ -197,13 +184,11 @@ def filter_managed(
 
 def discover_repositories(
     config: Config,
-    runner: CommandRunner,
     *,
     client: GitHubClient | None = None,
 ) -> tuple[RemoteRepository, ...]:
     if client is None:
-        token, _ = token_with_optional_gh(config, runner)
-        client = GitHubClient(token)
+        client = GitHubClient(config.github_token)
     return filter_managed(
         client.list_organization_repositories(config.organization), config
     )

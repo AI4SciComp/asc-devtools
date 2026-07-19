@@ -7,7 +7,7 @@ import json
 import sys
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from datetime import datetime
 from typing import NoReturn, TextIO
 
 from asc_devtools import __version__
@@ -16,11 +16,7 @@ from asc_devtools.commands.doctor import run_doctor
 from asc_devtools.completion import BASH_COMPLETION
 from asc_devtools.config import Config, ConfigOverrides, load_config
 from asc_devtools.errors import AscError, ProcessError
-from asc_devtools.github import (
-    GitHubClient,
-    discover_repositories,
-    token_with_optional_gh,
-)
+from asc_devtools.github import GitHubClient, discover_repositories
 from asc_devtools.process import CommandRunner
 from asc_devtools.repositories import (
     OperationResult,
@@ -50,7 +46,7 @@ Commands:
   repo clone [NAME...]            Clone missing repositories
   repo status [NAME...] [--json]  Inspect local repositories
   repo sync [NAME...] [--dry-run] Download remote fast-forwards into clean repositories
-  repo save NAME --message TEXT   Commit local changes and push the tracked branch
+  repo save NAME [--message TEXT] Commit local changes and push the tracked branch
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
@@ -75,7 +71,9 @@ USAGE = {
     "repo clone": "Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n",
     "repo status": "Usage: asc repo status [REPOSITORY...] [--json]\n",
     "repo sync": "Usage: asc repo sync [REPOSITORY...] [--dry-run]\n",
-    "repo save": "Usage: asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]\n",
+    "repo save": (
+        "Usage: asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]\n"
+    ),
     "update": "Usage: asc update [--check] [--yes] [--prefix PATH]\n",
     "completion": "Usage: asc completion bash\n",
     "configure": "Usage: asc configure REPOSITORY --preset PRESET\n",
@@ -222,13 +220,14 @@ def _requested_help(arguments: argparse.Namespace) -> str | None:
 
 def _resolved_client(
     config: Config,
-    runner: CommandRunner,
     factory: Callable[[str], GitHubClient] | None,
 ) -> tuple[Config, GitHubClient]:
-    token, source = token_with_optional_gh(config, runner)
-    if token and not config.github_token:
-        config = replace(config, github_token=token, github_token_source=source)
+    token = config.github_token
     return config, (factory(token) if factory else GitHubClient(token))
+
+
+def _save_message(message: str) -> str:
+    return message or datetime.now().strftime("Updated at %Y-%m-%d %H:%M:%S")
 
 
 def _print_operations(results: Sequence[OperationResult], output: TextIO) -> None:
@@ -311,7 +310,7 @@ def main(
             print(BASH_COMPLETION, end="", file=output)
             return 0
         if arguments.command == "doctor":
-            config, client = _resolved_client(config, runner, github_client_factory)
+            config, client = _resolved_client(config, github_client_factory)
             return run_doctor(
                 config,
                 runner,
@@ -320,7 +319,7 @@ def main(
                 client=client,
             )
         if arguments.command == "update":
-            config, client = _resolved_client(config, runner, github_client_factory)
+            config, client = _resolved_client(config, github_client_factory)
             run_update(
                 current_version=__version__,
                 token=config.github_token,
@@ -335,8 +334,8 @@ def main(
             return 0
         if arguments.command == "repo":
             if arguments.repo_command in {"list", "clone"}:
-                config, client = _resolved_client(config, runner, github_client_factory)
-                repositories = discover_repositories(config, runner, client=client)
+                config, client = _resolved_client(config, github_client_factory)
+                repositories = discover_repositories(config, client=client)
                 if arguments.repo_command == "list":
                     if arguments.json:
                         json.dump(
@@ -364,12 +363,11 @@ def main(
                 _print_operations(results, output)
                 return 1 if operations_failed(results) else 0
             if arguments.repo_command == "save":
-                if not arguments.repository or not arguments.message:
-                    raise UsageError(
-                        "repo save requires one repository and --message"
-                    )
+                if not arguments.repository:
+                    raise UsageError("repo save requires one repository")
+                message = _save_message(arguments.message)
                 save_plan = plan_save_repository(
-                    config, arguments.repository, arguments.message, runner
+                    config, arguments.repository, message, runner
                 )
                 if arguments.dry_run:
                     _print_save_plan(save_plan, output)
