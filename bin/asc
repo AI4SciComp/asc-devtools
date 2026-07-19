@@ -1,0 +1,334 @@
+#!/usr/bin/env bash
+# asc-devtools managed file
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+asc_resolve_script_path() {
+  local source_path="$1"
+  local directory
+  local target
+  while [[ -L "${source_path}" ]]; do
+    directory=$(cd -P -- "$(dirname -- "${source_path}")" && pwd)
+    target=$(readlink -- "${source_path}")
+    [[ "${target}" == /* ]] && source_path="${target}" || source_path="${directory}/${target}"
+  done
+  directory=$(cd -P -- "$(dirname -- "${source_path}")" && pwd)
+  printf '%s/%s\n' "${directory}" "$(basename -- "${source_path}")"
+}
+
+ASC_EXECUTABLE=$(asc_resolve_script_path "${BASH_SOURCE[0]}")
+ASC_BIN_DIRECTORY=$(dirname -- "${ASC_EXECUTABLE}")
+ASC_INSTALL_ROOT=$(cd -- "${ASC_BIN_DIRECTORY}/.." && pwd)
+ASC_LIBRARY_DIRECTORY="${ASC_INSTALL_ROOT}/lib/asc"
+[[ -f "${ASC_LIBRARY_DIRECTORY}/common.sh" ]] || {
+  printf 'asc: error: libraries not found under %s\n' "${ASC_LIBRARY_DIRECTORY}" >&2
+  exit 1
+}
+
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/common.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/json.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/config.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/process.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/github.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/repository.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/doctor.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/cmake.sh"
+
+asc_print_help() {
+  cat <<'EOF'
+Usage: asc [GLOBAL OPTIONS] COMMAND [ARGS]
+
+Safely manage AI4SciComp repositories in one local workspace.
+
+Commands:
+  doctor [--json]                 Diagnose tools and GitHub access
+  workspace                       Print the resolved workspace
+  repo list [--json]              List organization repositories
+  repo clone [NAME...]            Clone missing repositories
+  repo status [NAME...] [--json]  Inspect local repositories
+  repo sync [NAME...] [--dry-run] Fast-forward clean repositories
+  configure NAME --preset PRESET  Configure a CMake preset
+  build NAME --preset PRESET      Build a CMake preset
+  test NAME --preset PRESET       Run a CTest preset
+  completion bash                 Print Bash completion
+
+Global options (must precede COMMAND):
+  --config PATH
+  --organization NAME
+  --workspace PATH
+  --no-color
+  -h, --help
+  --version
+EOF
+}
+
+asc_repo_list() {
+  local json_output="$1"
+  local discovery
+  local record name archived fork clone_url ssh_url default_branch private
+  local first=true
+  if ! discovery=$(asc_github_discover); then return 1; fi
+  if [[ "${json_output}" == true ]]; then
+    printf '[\n'
+    while IFS= read -r record; do
+      [[ -n "${record}" ]] || continue
+      IFS=$'\t' read -r name archived fork clone_url ssh_url default_branch private <<<"${record}"
+      [[ "${first}" == true ]] || printf ',\n'
+      first=false
+      printf '  {"name":%s,"archived":%s,"fork":%s,"clone_url":%s,"ssh_url":%s,"default_branch":%s,"private":%s}' \
+        "$(asc_json_quote "${name}")" "${archived}" "${fork}" \
+        "$(asc_json_quote "${clone_url}")" "$(asc_json_quote "${ssh_url}")" \
+        "$(asc_json_quote "${default_branch}")" "${private}"
+    done <<<"${discovery}"
+    printf '\n]\n'
+    return 0
+  fi
+  printf 'REPOSITORY\tVISIBILITY\tDEFAULT BRANCH\n'
+  while IFS= read -r record; do
+    [[ -n "${record}" ]] || continue
+    IFS=$'\t' read -r name archived fork clone_url ssh_url default_branch private <<<"${record}"
+    [[ "${private}" == true ]] && private=private || private=public
+    printf '%s\t%s\t%s\n' "${name}" "${private}" "${default_branch}"
+  done <<<"${discovery}"
+}
+
+asc_completion_bash() {
+  local completion_path="${ASC_INSTALL_ROOT}/completions/asc.bash"
+  [[ -f "${completion_path}" ]] || completion_path="${ASC_INSTALL_ROOT}/share/bash-completion/completions/asc"
+  [[ -f "${completion_path}" ]] || {
+    asc_error "Bash completion file not found"
+    return 1
+  }
+  cat -- "${completion_path}"
+}
+
+asc_usage_error() {
+  asc_error "$1"
+  printf '\n' >&2
+  asc_print_help >&2
+  return 2
+}
+
+asc_main() {
+  local config_override="${ASC_OVERRIDE_UNSET}"
+  local organization_override="${ASC_OVERRIDE_UNSET}"
+  local workspace_override="${ASC_OVERRIDE_UNSET}"
+  local command=""
+  local option
+  while (($# > 0)); do
+    case "$1" in
+      --config | --organization | --workspace)
+        option="$1"
+        (($# >= 2)) || {
+          asc_usage_error "${option} requires a value"
+          return
+        }
+        case "${option}" in
+          --config) config_override="$2" ;;
+          --organization) organization_override="$2" ;;
+          --workspace) workspace_override="$2" ;;
+        esac
+        shift 2
+        ;;
+      --no-color) shift ;;
+      -h | --help)
+        asc_print_help
+        return 0
+        ;;
+      --version)
+        printf 'asc %s\n' "${ASC_VERSION}"
+        return 0
+        ;;
+      --*)
+        asc_usage_error "unknown global option: $1"
+        return
+        ;;
+      *)
+        command="$1"
+        shift
+        break
+        ;;
+    esac
+  done
+  [[ -n "${command}" ]] || {
+    asc_usage_error "a command is required"
+    return
+  }
+
+  if (($# == 1)) && [[ "$1" == -h || "$1" == --help ]]; then
+    case "${command}" in
+      workspace) printf 'Usage: asc workspace\n' ;;
+      doctor) printf 'Usage: asc doctor [--json]\n' ;;
+      repo) printf 'Usage: asc repo {list|clone|status|sync} [OPTIONS] [REPOSITORY...]\n' ;;
+      configure | build | test) printf 'Usage: asc %s REPOSITORY --preset PRESET\n' "${command}" ;;
+      completion) printf 'Usage: asc completion bash\n' ;;
+      *)
+        asc_usage_error "unknown command: ${command}"
+        return
+        ;;
+    esac
+    return 0
+  fi
+
+  asc_config_load "${config_override}" "${organization_override}" "${workspace_override}" || return 1
+  case "${command}" in
+    workspace)
+      (($# == 0)) || {
+        asc_usage_error "workspace takes no arguments"
+        return
+      }
+      printf '%s\n' "${ASC_WORKSPACE}"
+      ;;
+    doctor)
+      local doctor_json=false
+      if (($# == 1)) && [[ "$1" == --json ]]; then
+        doctor_json=true
+      elif (($# != 0)); then
+        asc_usage_error "doctor accepts only --json"
+        return
+      fi
+      asc_doctor "${doctor_json}"
+      ;;
+    repo)
+      (($# > 0)) || {
+        asc_usage_error "a repo command is required"
+        return
+      }
+      local repo_command="$1"
+      shift
+      if (($# == 1)) && [[ "$1" == -h || "$1" == --help ]]; then
+        printf 'Usage: asc repo %s [OPTIONS] [REPOSITORY...]\n' "${repo_command}"
+        return 0
+      fi
+      case "${repo_command}" in
+        list)
+          local list_json=false
+          if (($# == 1)) && [[ "$1" == --json ]]; then
+            list_json=true
+          elif (($# != 0)); then
+            asc_usage_error "repo list accepts only --json"
+            return
+          fi
+          asc_repo_list "${list_json}"
+          ;;
+        clone)
+          local protocol="${ASC_CLONE_PROTOCOL}"
+          local -a clone_names=()
+          while (($# > 0)); do
+            if [[ "$1" == --protocol ]]; then
+              (($# >= 2)) || {
+                asc_usage_error "--protocol requires a value"
+                return
+              }
+              protocol="$2"
+              shift 2
+            elif [[ "$1" == -* ]]; then
+              asc_usage_error "unknown repo clone option: $1"
+              return
+            else
+              clone_names+=("$1")
+              shift
+            fi
+          done
+          [[ "${protocol}" == ssh || "${protocol}" == https ]] || {
+            asc_usage_error "protocol must be ssh or https"
+            return
+          }
+          asc_repository_clone "${protocol}" "${clone_names[@]}"
+          ;;
+        status)
+          local status_json=false
+          local -a status_names=()
+          while (($# > 0)); do
+            if [[ "$1" == --json ]]; then
+              status_json=true
+            elif [[ "$1" == -* ]]; then
+              asc_usage_error "unknown repo status option: $1"
+              return
+            else
+              status_names+=("$1")
+            fi
+            shift
+          done
+          asc_repository_status "${status_json}" "${status_names[@]}"
+          ;;
+        sync)
+          local dry_run=false
+          local -a sync_names=()
+          while (($# > 0)); do
+            if [[ "$1" == --dry-run ]]; then
+              dry_run=true
+            elif [[ "$1" == -* ]]; then
+              asc_usage_error "unknown repo sync option: $1"
+              return
+            else
+              sync_names+=("$1")
+            fi
+            shift
+          done
+          asc_repository_sync "${dry_run}" "${sync_names[@]}"
+          ;;
+        *)
+          asc_usage_error "unknown repo command: ${repo_command}"
+          return
+          ;;
+      esac
+      ;;
+    configure | build | test)
+      local repository=""
+      local preset=""
+      while (($# > 0)); do
+        case "$1" in
+          --preset)
+            (($# >= 2)) || {
+              asc_usage_error "--preset requires a value"
+              return
+            }
+            preset="$2"
+            shift 2
+            ;;
+          -*)
+            asc_usage_error "unknown ${command} option: $1"
+            return
+            ;;
+          *)
+            [[ -z "${repository}" ]] || {
+              asc_usage_error "${command} takes one repository"
+              return
+            }
+            repository="$1"
+            shift
+            ;;
+        esac
+      done
+      [[ -n "${repository}" && -n "${preset}" ]] || {
+        asc_usage_error "repository and --preset are required"
+        return
+      }
+      asc_cmake_run "${command}" "${repository}" "${preset}"
+      ;;
+    completion)
+      if (($# != 1)) || [[ "$1" != bash ]]; then
+        asc_usage_error "only Bash completion is supported"
+        return
+      fi
+      asc_completion_bash
+      ;;
+    *)
+      asc_usage_error "unknown command: ${command}"
+      return
+      ;;
+  esac
+}
+
+asc_main "$@"
