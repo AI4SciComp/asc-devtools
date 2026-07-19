@@ -275,12 +275,10 @@ asc_config_load() {
     ASC_GITHUB_TOKEN_VALUE="${GH_TOKEN}"
     ASC_GITHUB_TOKEN_SOURCE="GH_TOKEN"
   elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    ASC_GITHUB_TOKEN_VALUE="${GITHUB_TOKEN}"
-    ASC_GITHUB_TOKEN_SOURCE="GITHUB_TOKEN"
-  elif command -v gh >/dev/null 2>&1; then
-    ASC_GITHUB_TOKEN_VALUE=$(gh auth token 2>/dev/null || true)
-    # Consumed by doctor.sh after this module is sourced.
+    # These globals are consumed by github.sh, doctor.sh, and update.sh.
     # shellcheck disable=SC2034
-    [[ -z "${ASC_GITHUB_TOKEN_VALUE}" ]] || ASC_GITHUB_TOKEN_SOURCE="gh auth token"
+    ASC_GITHUB_TOKEN_VALUE="${GITHUB_TOKEN}"
+    # shellcheck disable=SC2034
+    ASC_GITHUB_TOKEN_SOURCE="GITHUB_TOKEN"
   fi
 }

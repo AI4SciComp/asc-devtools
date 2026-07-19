@@ -9,8 +9,9 @@ addendum overrides conflicting v0.1 details below:
 
 - use strict `~/.config/asc/config.json` with camelCase keys and canonical CLI,
   environment, file, default precedence;
-- use the direct GitHub REST API through bounded curl requests with optional
-  `gh auth token` fallback, not `gh repo list`;
+- use the direct GitHub REST API through bounded curl requests with
+  environment-token authentication; never invoke GitHub CLI. This overrides
+  every lower v0.1 instruction that mentions GitHub CLI;
 - support `doctor --json`, `repo status --json`, clone `--protocol`, sync
   `--dry-run`, and `completion bash` with the documented stable schemas;
 - require `--preset` and invoke the exact CMake/CTest argument arrays;
@@ -124,8 +125,8 @@ Before editing:
 3. Search for `AGENTS.md` or equivalent instructions and follow them.
 4. Identify existing user changes and preserve them.
 5. Run existing tests and syntax checks to establish a baseline.
-6. Check available versions of Bash, Git, GitHub CLI, CMake, CTest, ShellCheck,
-   and `shfmt`.
+6. Check available versions of Bash, Git, curl, CMake, CTest, ShellCheck, and
+   `shfmt`.
 7. Inspect the current remote with `git remote -v`, but do not change it unless
    necessary and explicitly authorized.
 
@@ -327,7 +328,7 @@ Runtime dependencies:
 
 - Bash 4.4+
 - Git
-- GitHub CLI (`gh`)
+- curl and standard Unix utilities
 - CMake and CTest only for C++ build commands
 
 Optional development dependencies:
@@ -335,11 +336,8 @@ Optional development dependencies:
 - ShellCheck
 - shfmt
 
-Do not require external `jq`. Use GitHub CLI's built-in `--json` and `--jq`
-support for repository discovery. Keep `--jq` expressions simple and test their
-output assumptions.
-
-Do not parse human-oriented `gh` tables.
+Do not require external `jq`. Use bounded curl requests and the strict Bash JSON
+parser for repository discovery. Never parse human-oriented command output.
 
 ## 9. GitHub identities and authentication
 
@@ -350,26 +348,16 @@ Authenticated personal user: escapetiger
 Repository owner: AI4SciComp
 ```
 
-Repository discovery queries the organization:
-
-```bash
-gh repo list AI4SciComp ...
-```
-
-Git SSH operations authenticate using the SSH key associated with `escapetiger`.
-GitHub CLI API calls authenticate using the token stored by `gh auth login`.
-
-Do not claim the SSH key authenticates GitHub API calls. `asc doctor` must explain
-and test these two layers separately.
+Repository discovery queries `GET /orgs/AI4SciComp/repos` directly. Git SSH
+operations authenticate using the configured SSH key. REST requests optionally
+authenticate with `ASC_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`; never invoke
+GitHub CLI. `asc doctor` must explain and test the transport and API layers
+separately.
 
 ## 10. Repository discovery
 
-Use GitHub CLI to list repositories. Prefer a stable machine-oriented output such
-as tab-separated fields produced with `--jq`:
-
-```text
-name<TAB>nameWithOwner<TAB>isArchived
-```
+Use the GitHub REST API to list repositories and parse its JSON with the bundled
+strict parser. Bound response sizes and request timeouts.
 
 Default selection:
 
@@ -398,7 +386,7 @@ Requirements:
 - Return nonzero when any requested clone fails.
 - Never assume organization repositories belong to `escapetiger`.
 
-For SSH, deliberately use Git rather than passing an SSH URL to `gh repo clone`:
+For SSH, use Git with the API-provided SSH URL:
 
 ```bash
 git clone -- "git@github.com:AI4SciComp/REPOSITORY.git" DESTINATION
@@ -410,8 +398,7 @@ For HTTPS, use:
 git clone -- "https://github.com/AI4SciComp/REPOSITORY.git" DESTINATION
 ```
 
-This avoids ambiguity between the accepted argument formats of `git clone` and
-`gh repo clone`. GitHub CLI remains responsible for organization discovery.
+Use only `git clone` for repository transport; REST discovery remains separate.
 
 ## 12. Local repository discovery and validation
 
@@ -486,12 +473,10 @@ Do not fetch or pull `.github` differently from other repositories.
 - Bash version and whether it meets the minimum;
 - resolved configuration path;
 - organization and workspace;
-- availability and versions of Git, GitHub CLI, CMake, and CTest;
+- availability and versions of Git, curl, CMake, and CTest;
 - optional availability of ShellCheck and shfmt;
-- authenticated GitHub username using `gh api user --jq .login`;
-- GitHub CLI Git protocol using `gh config get git_protocol --host github.com`;
-- result of GitHub CLI API authentication;
-- whether GitHub CLI can list repositories in `AI4SciComp`;
+- API token availability without printing the token;
+- whether direct REST access can list repositories in `AI4SciComp`;
 - SSH authentication result using `ssh -T git@github.com`, interpreted carefully
   because GitHub's successful SSH test may return a nonstandard status;
 - whether the workspace exists and is writable;
@@ -643,7 +628,7 @@ Tests must not:
 - change global Git configuration;
 - depend on the user's home configuration.
 
-Mock external commands by creating temporary executables named `gh`, `git`,
+Mock external commands by creating temporary executables named `curl`, `git`,
 `cmake`, or `ctest` at the front of a test-specific `PATH`. For Git semantics that
 are clearer with real Git, initialize repositories inside a temporary directory
 and set repository-local test identity:
@@ -670,7 +655,7 @@ At minimum, test:
 - `.github` inclusion/exclusion;
 - archived filtering;
 - deterministic ordering;
-- failed GitHub CLI authentication;
+- failed REST API authentication;
 
 ### Validation
 
@@ -752,7 +737,7 @@ Write a complete README with:
 - WSL2 installation;
 - direct-checkout use;
 - distinction between `escapetiger` and `AI4SciComp`;
-- Git SSH versus GitHub CLI API authentication;
+- Git SSH versus environment-token REST authentication;
 - configuration;
 - quick start;
 - every command with examples;
@@ -846,11 +831,12 @@ packaging helper and document the release asset contract.
 
 This section supersedes the earlier prohibition on application commit/push
 functionality only for one explicit command. Add
-`asc repo save REPOSITORY --message TEXT [--dry-run] [--yes]`. Keep `repo sync`
+`asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]`. Keep `repo sync`
 download-only and document that it fetches plus fast-forward merges clean
-worktrees; it never uploads. Save operates on exactly one managed worktree,
-requires a short one-line message, prints an exact plan, and prompts unless
-`--yes`. Before staging, revalidate the reviewed status, fetch the configured
+worktrees; it never uploads. Save operates on exactly one managed worktree and
+defaults to `Updated at YYYY-MM-DD HH:MM:SS` in local time when `--message` is
+omitted. It prints an exact plan and prompts unless `--yes`. Before staging,
+revalidate the reviewed status and fetch the configured
 remote, and refuse detached HEAD, conflicts, missing/wrong upstream, remote-ahead,
 or diverged histories. Then stage all changes, commit only a nonempty index, and
 push the exact tracked branch without force. A clean locally-ahead branch may be

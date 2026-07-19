@@ -114,7 +114,7 @@ asc_github_api_error() {
   local status="$1"
   local headers="$2"
   case "${status}" in
-    401) asc_error "GitHub API authentication failed (401): configure ASC_GITHUB_TOKEN or run gh auth login" ;;
+    401) asc_error "GitHub API authentication failed (401): configure ASC_GITHUB_TOKEN" ;;
     403)
       if grep -qi '^X-RateLimit-Remaining: 0' "${headers}"; then
         asc_error "GitHub API rate limit exceeded (403): authenticate or wait for reset"
