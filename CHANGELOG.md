@@ -4,6 +4,15 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Hash-verified uninstall support for the executable and Bash completion.
+
+### Changed
+
+- The installer now defaults to the conventional `/usr/local` system prefix and
+  supports `DESTDIR` staging.
+
 ## [0.1.0] - 2026-07-19
 
 ### Added

@@ -13,6 +13,7 @@ go test -race ./...
 CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
 /tmp/asc --help
 /tmp/asc --version
+scripts/test_install.sh /tmp/asc
 go mod tidy
 ```
 

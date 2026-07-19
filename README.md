@@ -29,26 +29,36 @@ manager.
 ## Build and install on WSL2
 
 ```bash
-CGO_ENABLED=0 go build -trimpath -o ./asc ./cmd/asc
-install -Dm755 ./asc "${HOME}/.local/bin/asc"
-export PATH="${HOME}/.local/bin:${PATH}"
+CGO_ENABLED=0 go build -trimpath -o ./dist/asc ./cmd/asc
+sudo ./scripts/install.sh --binary ./dist/asc
+asc --version
 ```
 
-For a development install:
+The default prefix is `/usr/local`, so the executable is installed at
+`/usr/local/bin/asc` and is normally available on `PATH`. The installer also
+adds Bash completion and a hash manifest used to protect upgrades and removal.
+
+To build and install in one step when root's environment contains Go:
 
 ```bash
-go install ./cmd/asc
+sudo ./scripts/install.sh
 ```
 
-The optional installer builds locally or copies an existing binary:
+Use another system prefix or a packaging staging root explicitly:
 
 ```bash
-./scripts/install.sh
-./scripts/install.sh --binary ./asc --prefix "${HOME}/.local"
+sudo ./scripts/install.sh --binary ./dist/asc --prefix /opt/asc
+./scripts/install.sh --binary ./dist/asc --destdir "${DESTDIR}"
 ```
 
-It does not download tools, use sudo, or modify shell configuration. See
-[installation.md](docs/installation.md).
+Uninstall the exact managed files with:
+
+```bash
+sudo ./scripts/uninstall.sh
+```
+
+Neither script downloads tools, invokes `sudo`, changes shell configuration, or
+recursively deletes a prefix. See [installation.md](docs/installation.md).
 
 ## Authentication
 

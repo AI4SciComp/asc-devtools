@@ -21,7 +21,9 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache: true
       - name: Check formatting
-        run: test -z "$(find cmd internal -name '*.go' -print0 | xargs -0 gofmt -l)"
+        run: |
+          test -z "$(find cmd internal -name '*.go' -print0 | xargs -0 gofmt -l)"
+          bash -n scripts/*.sh
       - name: Verify dependency-free module
         run: |
           go mod tidy
@@ -40,3 +42,4 @@ jobs:
           CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
           /tmp/asc --version
           /tmp/asc --help
+          scripts/test_install.sh /tmp/asc
