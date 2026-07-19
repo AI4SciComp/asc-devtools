@@ -10,7 +10,55 @@ readonly ASC_DEFAULT_REPOSITORY_PREFIX="asc-"
 readonly ASC_DEFAULT_INCLUDE_DOT_GITHUB="true"
 readonly ASC_DEFAULT_CLONE_PROTOCOL="ssh"
 readonly ASC_DEFAULT_REMOTE="origin"
+readonly ASC_DEFAULT_CMAKE_VENDOR_DIRECTORY="cmake/asc"
+readonly ASC_DEFAULT_CMAKE_SOURCE_REPOSITORY="asc-cmake"
 readonly ASC_OVERRIDE_UNSET="__ASC_OVERRIDE_UNSET__"
+
+asc_config_parse_cmake() {
+  local character key value value_type
+  local -A seen=()
+  asc_json_expect '{' || return 1
+  asc_json_skip_whitespace
+  if [[ "${ASC_JSON_TEXT:ASC_JSON_POSITION:1}" == '}' ]]; then
+    ((ASC_JSON_POSITION += 1))
+    return 0
+  fi
+  while true; do
+    asc_json_parse_string || return 1
+    key="${ASC_JSON_VALUE}"
+    [[ ! -v "seen[${key}]" ]] || {
+      asc_error "duplicate cmake configuration field: ${key}"
+      return 1
+    }
+    seen["${key}"]=1
+    asc_json_expect ':' || return 1
+    asc_json_parse_scalar || return 1
+    value="${ASC_JSON_VALUE}"
+    value_type="${ASC_JSON_TYPE}"
+    case "${key}" in
+      vendorDirectory | sourceRepository) ;;
+      *)
+        asc_error "unknown cmake configuration field: ${key}"
+        return 1
+        ;;
+    esac
+    [[ "${value_type}" == string ]] || {
+      asc_error "cmake configuration field ${key} must be a string"
+      return 1
+    }
+    case "${key}" in
+      vendorDirectory) ASC_CMAKE_VENDOR_DIRECTORY="${value}" ;;
+      sourceRepository) ASC_CMAKE_SOURCE_REPOSITORY="${value}" ;;
+    esac
+    asc_json_skip_whitespace
+    character="${ASC_JSON_TEXT:ASC_JSON_POSITION:1}"
+    if [[ "${character}" == '}' ]]; then
+      ((ASC_JSON_POSITION += 1))
+      break
+    fi
+    asc_json_expect ',' || return 1
+  done
+}
 
 asc_config_parse_file() {
   local content="$1"
@@ -36,9 +84,15 @@ asc_config_parse_file() {
     }
     seen["${key}"]=1
     asc_json_expect ':' || return 1
-    asc_json_parse_scalar || return 1
-    value="${ASC_JSON_VALUE}"
-    value_type="${ASC_JSON_TYPE}"
+    if [[ "${key}" == cmake ]]; then
+      asc_config_parse_cmake || return 1
+      value=""
+      value_type=object
+    else
+      asc_json_parse_scalar || return 1
+      value="${ASC_JSON_VALUE}"
+      value_type="${ASC_JSON_TYPE}"
+    fi
     case "${key}" in
       organization | workspace | repositoryPrefix | cloneProtocol | remote)
         [[ "${value_type}" == "string" ]] || {
@@ -52,6 +106,7 @@ asc_config_parse_file() {
           return 1
         }
         ;;
+      cmake) ;;
       *)
         asc_error "unknown configuration field: ${key}"
         return 1
@@ -64,6 +119,7 @@ asc_config_parse_file() {
       includeDotGitHub) ASC_INCLUDE_DOT_GITHUB="${value}" ;;
       cloneProtocol) ASC_CLONE_PROTOCOL="${value}" ;;
       remote) ASC_REMOTE="${value}" ;;
+      cmake) ;;
     esac
     asc_json_skip_whitespace
     character="${ASC_JSON_TEXT:ASC_JSON_POSITION:1}"
@@ -133,6 +189,8 @@ asc_config_load() {
   ASC_INCLUDE_DOT_GITHUB="${ASC_DEFAULT_INCLUDE_DOT_GITHUB}"
   ASC_CLONE_PROTOCOL="${ASC_DEFAULT_CLONE_PROTOCOL}"
   ASC_REMOTE="${ASC_DEFAULT_REMOTE}"
+  ASC_CMAKE_VENDOR_DIRECTORY="${ASC_DEFAULT_CMAKE_VENDOR_DIRECTORY}"
+  ASC_CMAKE_SOURCE_REPOSITORY="${ASC_DEFAULT_CMAKE_SOURCE_REPOSITORY}"
 
   if [[ -L "${ASC_CONFIG_PATH}" || (-e "${ASC_CONFIG_PATH}" && ! -f "${ASC_CONFIG_PATH}") ]]; then
     asc_error "configuration path is not a regular file: ${ASC_CONFIG_PATH}"
@@ -187,6 +245,24 @@ asc_config_load() {
   }
   [[ "${ASC_WORKSPACE}" != "/" ]] || {
     asc_error "workspace must not be a filesystem root"
+    return 1
+  }
+  [[ -n "${ASC_CMAKE_VENDOR_DIRECTORY}" &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != /* &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != *\\* &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != *//* &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != "." &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != ".." &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != ../* &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != */../* &&
+    "${ASC_CMAKE_VENDOR_DIRECTORY}" != */.. ]] || {
+    asc_error "CMake vendor directory must be a safe relative path"
+    return 1
+  }
+  [[ -n "${ASC_CMAKE_SOURCE_REPOSITORY}" &&
+    "${ASC_CMAKE_SOURCE_REPOSITORY}" != -* &&
+    "${ASC_CMAKE_SOURCE_REPOSITORY}" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    asc_error "CMake source repository must be a simple name"
     return 1
   }
 

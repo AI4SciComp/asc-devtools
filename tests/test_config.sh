@@ -80,9 +80,29 @@ test_environment_validation() {
   assert_contains "${CAPTURED_OUTPUT}" "filesystem root"
 }
 
+test_cmake_configuration() {
+  local directory config
+  directory=$(test_case_directory cmake_config)
+  config="${directory}/config.json"
+  printf '%s\n' '{"cmake":{"vendorDirectory":"vendor/asc","sourceRepository":"asc-cmake-local"}}' >"${config}"
+  capture_command env -u ASC_WORKSPACE HOME="${directory}/home" ASC_CONFIG="${config}" PATH="${SYSTEM_PATH}" \
+    "${PROJECT_ROOT}/bin/asc" workspace
+  assert_success "${CAPTURED_STATUS}"
+  printf '%s\n' '{"cmake":{"unknown":true}}' >"${config}"
+  capture_command env -u ASC_WORKSPACE HOME="${directory}/home" ASC_CONFIG="${config}" PATH="${SYSTEM_PATH}" \
+    "${PROJECT_ROOT}/bin/asc" workspace
+  assert_failure "${CAPTURED_STATUS}"
+  assert_contains "${CAPTURED_OUTPUT}" "unknown cmake configuration field"
+  printf '%s\n' '{"cmake":{"vendorDirectory":"../escape"}}' >"${config}"
+  capture_command env -u ASC_WORKSPACE HOME="${directory}/home" ASC_CONFIG="${config}" PATH="${SYSTEM_PATH}" \
+    "${PROJECT_ROOT}/bin/asc" workspace
+  assert_failure "${CAPTURED_STATUS}"
+}
+
 run_test "configuration defaults" test_defaults
 run_test "JSON and precedence" test_json_and_precedence
 run_test "strict JSON" test_strict_json
 run_test "JSON escapes" test_json_escapes
 run_test "environment validation" test_environment_validation
+run_test "CMake vendor configuration" test_cmake_configuration
 finish_tests

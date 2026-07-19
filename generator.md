@@ -1,9 +1,11 @@
 # Generator Prompt: Bash `AI4SciComp/asc-devtools`
 
-## Authoritative parity addendum
+## Authoritative v2 parity addendum
 
-Generate the Bash branch with the same observable contract as the Go reference
-on `go`. This addendum overrides conflicting details below:
+Upgrade the Bash branch in place with the same observable v2 contract as the Go
+reference on `go`. Preserve public commands, JSON schemas, exit codes,
+configuration, installation lifecycle, tests, and unrelated changes. This
+addendum overrides conflicting v0.1 details below:
 
 - use strict `~/.config/asc/config.json` with camelCase keys and canonical CLI,
   environment, file, default precedence;
@@ -14,6 +16,37 @@ on `go`. This addendum overrides conflicting details below:
 - require `--preset` and invoke the exact CMake/CTest argument arrays;
 - default installation to `/usr/local` and provide hash-verified uninstall;
 - preserve exit codes 0, 1, and 2 and propagate CMake/CTest codes 1 through 125.
+
+The dynamic current topology is `asc-devtools`, `asc-cmake`, `asc-cpp`,
+`asc-xde`, `asc-kinetic`, `asc-lean`, and `asc-lab`, plus optional `.github`.
+Replace stale `asc-pde` and `asc-platform` examples without hard-coding discovery.
+
+Preserve legacy top-level configure/build/test and add grouped `asc cmake`
+configure, build (`--target`), test (`--label`, `--output-on-failure`), workflow,
+and presets (`--json`). Delegate preset semantics to CMake/CTest. Require
+`CMakeLists.txt` for configure/workflow. Workflow reports safe arrays to stderr,
+stops on first failure, and never syncs or vendors implicitly.
+
+Add local-only `asc cmake vendor status|plan|apply`. Default source is sibling
+`asc-cmake`; target is `cmake/asc`. Prefer exact strict `distribution.json`,
+otherwise allow only nonsymlink `modules/**/*.cmake` and `LICENSE`. Generate a
+deterministic strict schema-v1 `ASC_CMAKE_MANIFEST.json` with source, version,
+commit, sorted slash paths, and SHA-256 hashes; omit timestamps. Validate source
+Git worktree, origin, optional ref, dirtiness, containment, and regular files.
+Version precedence is `VERSION`, CMake project version, then exact tag.
+
+Status values are `not-vendored`, `current`, `source-newer`, `locally-modified`,
+`manifest-invalid`, and `source-unavailable`, with unmanaged extras reported and
+preserved. Plan is read-only and emits add/replace/preserve/remove; removals are
+limited to unchanged old managed bytes. Apply prompts unless `--yes`, recomputes
+the exact plan, refuses dirty sources or changed managed files, stages writes,
+writes the manifest last, rolls back its own work, and never stages/commits Git.
+
+Add strict nested `cmake.vendorDirectory` and `cmake.sourceRepository`
+configuration, read-only doctor source checks, isolated Bash tests with synthetic
+temporary Git sources and paths containing spaces, documentation, completion,
+installer file lists, and CI parity. Remain Bash 4.4+ without Python, jq, `eval`,
+or evaluated command strings.
 
 The maintained implementation, tests, README, and `docs/commands.md` are the
 executable specification when older examples below disagree.
@@ -69,10 +102,10 @@ Expected repositories include:
 AI4SciComp/.github
 AI4SciComp/asc-devtools
 AI4SciComp/asc-cpp
-AI4SciComp/asc-pde
+AI4SciComp/asc-xde
 AI4SciComp/asc-kinetic
 AI4SciComp/asc-lean
-AI4SciComp/asc-platform
+AI4SciComp/asc-lab
 ```
 
 The tool should help an Ubuntu/WSL2 developer discover, clone, inspect, update,
@@ -795,3 +828,16 @@ Lead with the working outcome. Report:
 
 Do not include a long chronological diary. Do not commit, push, publish, or open a
 pull request unless separately requested.
+
+## 27. User-requested self-update extension (2026-07-19)
+
+This section supersedes the earlier exclusion of release-related functionality
+only where needed for installing a published asc release. Implement a top-level
+`asc update [--check] [--yes] [--prefix PATH]`; it is not an alias for
+`asc repo sync`, and `repo update` must not exist. The command checks the latest
+release in `AI4SciComp/asc-devtools`, selects `asc-devtools-shell.tar.gz`,
+verifies it against the release `SHA256SUMS`, rejects unsafe archive contents,
+and runs the existing hash-guarded installer. It refuses unmanaged or modified
+installations, never invokes `sudo`, supports the normal GitHub token precedence,
+bounds all downloads, and has offline curl-fixture tests. Include a deterministic
+packaging helper and document the release asset contract.

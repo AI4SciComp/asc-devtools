@@ -189,7 +189,16 @@ while (($# > 0)); do
 done
 printf 'url:%s\n' "${url}" >>"${MOCK_LOG}"
 printf '%b' "${MOCK_CURL_HEADERS:-}" >"${headers}"
-printf '%s' "${MOCK_CURL_BODY:-[]}" >"${body}"
+if [[ "${MOCK_CURL_ROUTED:-false}" == true ]]; then
+  case "${url}" in
+    */releases/latest) cp -- "${MOCK_CURL_RELEASE_FILE}" "${body}" ;;
+    */SHA256SUMS) cp -- "${MOCK_CURL_SUMS_FILE}" "${body}" ;;
+    */asc-devtools-shell.tar.gz) cp -- "${MOCK_CURL_ARCHIVE_FILE}" "${body}" ;;
+    *) printf '[]' >"${body}" ;;
+  esac
+else
+  printf '%s' "${MOCK_CURL_BODY:-[]}" >"${body}"
+fi
 printf '%s' "${MOCK_CURL_STATUS:-200}"
 exit "${MOCK_CURL_EXIT:-0}"
 EOF

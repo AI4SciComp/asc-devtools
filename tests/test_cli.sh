@@ -11,11 +11,17 @@ test_help_version_completion_and_usage() {
   assert_success "${CAPTURED_STATUS}"
   assert_contains "${CAPTURED_OUTPUT}" "repo clone"
   assert_contains "${CAPTURED_OUTPUT}" "repo sync"
+  assert_contains "${CAPTURED_OUTPUT}" "update [--check]"
   capture_command "${PROJECT_ROOT}/bin/asc" --version
   assert_equal "asc 0.1.0" "${CAPTURED_OUTPUT}"
   capture_command "${PROJECT_ROOT}/bin/asc" completion bash
   assert_success "${CAPTURED_STATUS}"
   assert_contains "${CAPTURED_OUTPUT}" "complete -F _asc_completion asc"
+  capture_command "${PROJECT_ROOT}/bin/asc" update --help
+  assert_success "${CAPTURED_STATUS}"
+  assert_contains "${CAPTURED_OUTPUT}" "--prefix"
+  capture_command "${PROJECT_ROOT}/bin/asc" repo update
+  assert_equal 2 "${CAPTURED_STATUS}"
   capture_command "${PROJECT_ROOT}/bin/asc" unknown
   assert_equal 2 "${CAPTURED_STATUS}"
 }

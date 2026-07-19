@@ -43,6 +43,10 @@ source "${ASC_LIBRARY_DIRECTORY}/repository.sh"
 source "${ASC_LIBRARY_DIRECTORY}/doctor.sh"
 # shellcheck source=/dev/null
 source "${ASC_LIBRARY_DIRECTORY}/cmake.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/vendor.sh"
+# shellcheck source=/dev/null
+source "${ASC_LIBRARY_DIRECTORY}/update.sh"
 
 asc_print_help() {
   cat <<'EOF'
@@ -60,6 +64,8 @@ Commands:
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
+  cmake COMMAND ...               CMake workflows and local vendoring
+  update [--check] [--yes]        Update asc to the latest release
   completion bash                 Print Bash completion
 
 Global options (must precede COMMAND):
@@ -119,6 +125,249 @@ asc_usage_error() {
   return 2
 }
 
+asc_run_cmake_operation() {
+  local operation="$1"
+  shift
+  local repository="" preset="" label=""
+  local output_on_failure=false
+  local -a targets=() options=()
+  while (($# > 0)); do
+    case "$1" in
+      --preset | --target | --label)
+        (($# >= 2)) || {
+          asc_usage_error "$1 requires a value"
+          return
+        }
+        case "$1" in
+          --preset) preset="$2" ;;
+          --target)
+            [[ "${operation}" == build ]] || {
+              asc_usage_error "--target is valid only for cmake build"
+              return
+            }
+            targets+=("$2")
+            ;;
+          --label)
+            [[ "${operation}" == test ]] || {
+              asc_usage_error "--label is valid only for cmake test"
+              return
+            }
+            label="$2"
+            ;;
+        esac
+        shift 2
+        ;;
+      --output-on-failure)
+        [[ "${operation}" == test ]] || {
+          asc_usage_error "--output-on-failure is valid only for cmake test"
+          return
+        }
+        output_on_failure=true
+        shift
+        ;;
+      -*)
+        asc_usage_error "unknown cmake ${operation} option: $1"
+        return
+        ;;
+      *)
+        [[ -z "${repository}" ]] || {
+          asc_usage_error "cmake ${operation} takes one repository"
+          return
+        }
+        repository="$1"
+        shift
+        ;;
+    esac
+  done
+  [[ -n "${repository}" && -n "${preset}" ]] || {
+    asc_usage_error "repository and --preset are required"
+    return
+  }
+  local target
+  for target in "${targets[@]}"; do options+=(--target "${target}"); done
+  [[ -z "${label}" ]] || options+=(--label "${label}")
+  [[ "${output_on_failure}" != true ]] || options+=(--output-on-failure)
+  asc_cmake_run "${operation}" "${repository}" "${preset}" "${options[@]}"
+}
+
+asc_run_cmake_vendor() {
+  local vendor_command="${1:-}"
+  (($# > 0)) && shift
+  [[ -n "${vendor_command}" ]] || {
+    asc_usage_error "a vendor command is required"
+    return
+  }
+  if (($# == 1)) && [[ "$1" == -h || "$1" == --help ]]; then
+    printf 'Usage: asc cmake vendor %s REPOSITORY [OPTIONS]\n' "${vendor_command}"
+    return 0
+  fi
+  local repository="" source_path="" requested_ref="" answer=""
+  local json_output=false yes=false
+  while (($# > 0)); do
+    case "$1" in
+      --source | --ref)
+        (($# >= 2)) || {
+          asc_usage_error "$1 requires a value"
+          return
+        }
+        [[ "$1" == --source ]] && source_path="$2" || requested_ref="$2"
+        shift 2
+        ;;
+      --json) json_output=true; shift ;;
+      --yes) yes=true; shift ;;
+      -*)
+        asc_usage_error "unknown vendor ${vendor_command} option: $1"
+        return
+        ;;
+      *)
+        [[ -z "${repository}" ]] || {
+          asc_usage_error "vendor ${vendor_command} takes one repository"
+          return
+        }
+        repository="$1"
+        shift
+        ;;
+    esac
+  done
+  [[ -n "${repository}" ]] || {
+    asc_usage_error "vendor ${vendor_command} requires one repository"
+    return
+  }
+  case "${vendor_command}" in
+    status)
+      [[ -z "${source_path}" && -z "${requested_ref}" && "${yes}" == false ]] || {
+        asc_usage_error "vendor status accepts only --json"
+        return
+      }
+      asc_vendor_status "${repository}" || return 1
+      if [[ "${json_output}" == true ]]; then
+        printf '{"repository":%s,"state":%s' \
+          "$(asc_json_quote "${repository}")" "$(asc_json_quote "${ASC_VENDOR_STATUS_STATE}")"
+        [[ -z "${ASC_VENDOR_MANIFEST_VERSION:-}" ]] || printf ',"version":%s' "$(asc_json_quote "${ASC_VENDOR_MANIFEST_VERSION}")"
+        [[ -z "${ASC_VENDOR_MANIFEST_COMMIT:-}" ]] || printf ',"commit":%s' "$(asc_json_quote "${ASC_VENDOR_MANIFEST_COMMIT}")"
+        if ((${#ASC_VENDOR_EXTRA_FILES[@]} > 0)); then
+          printf ',"extraFiles":['
+          local index
+          for index in "${!ASC_VENDOR_EXTRA_FILES[@]}"; do
+            ((index == 0)) || printf ','
+            asc_json_quote "${ASC_VENDOR_EXTRA_FILES[index]}"
+          done
+          printf ']'
+        fi
+        [[ -z "${ASC_VENDOR_STATUS_DETAIL}" ]] || printf ',"detail":%s' "$(asc_json_quote "${ASC_VENDOR_STATUS_DETAIL}")"
+        printf '}\n'
+      else
+        printf '%s: %s' "${repository}" "${ASC_VENDOR_STATUS_STATE}"
+        [[ -z "${ASC_VENDOR_STATUS_DETAIL}" ]] || printf ': %s' "${ASC_VENDOR_STATUS_DETAIL}"
+        printf '\n'
+        local extra
+        for extra in "${ASC_VENDOR_EXTRA_FILES[@]}"; do printf '  extra: %s\n' "${extra}"; done
+      fi
+      ;;
+    plan | apply)
+      if [[ "${vendor_command}" == plan && "${yes}" == true ]]; then
+        asc_usage_error "--yes is valid only for vendor apply"
+        return
+      fi
+      if [[ "${vendor_command}" == apply && "${json_output}" == true ]]; then
+        asc_usage_error "--json is valid only for vendor plan"
+        return
+      fi
+      asc_vendor_plan "${repository}" "${source_path}" "${requested_ref}" || return 1
+      if [[ "${vendor_command}" == plan ]]; then
+        [[ "${json_output}" == true ]] && asc_vendor_plan_json || asc_vendor_print_plan
+        return 0
+      fi
+      local approved_fingerprint="${ASC_VENDOR_PLAN_FINGERPRINT}"
+      if [[ "${yes}" != true ]]; then
+        asc_vendor_print_plan >&2
+        printf 'Apply this exact plan? [y/N] ' >&2
+        IFS= read -r answer || true
+        answer="${answer,,}"
+        if [[ "${answer}" != y && "${answer}" != yes ]]; then
+          printf 'asc: vendor apply cancelled\n' >&2
+          return 1
+        fi
+      fi
+      asc_vendor_plan "${repository}" "${source_path}" "${requested_ref}" || return 1
+      [[ "${ASC_VENDOR_PLAN_FINGERPRINT}" == "${approved_fingerprint}" ]] || {
+        asc_error "vendor plan changed during confirmation; run plan again"
+        return 1
+      }
+      asc_vendor_source_load "${source_path}" "${ASC_VENDOR_SOURCE_COMMIT}" false || return 1
+      asc_vendor_apply_current_plan || return 1
+      asc_vendor_print_plan
+      printf 'Applied vendored asc-cmake files. Review with: git diff -- %s\n' "${ASC_CMAKE_VENDOR_DIRECTORY}"
+      ;;
+    *)
+      asc_usage_error "unknown vendor command: ${vendor_command}"
+      return
+      ;;
+  esac
+}
+
+asc_run_cmake_group() {
+  local cmake_command="${1:-}"
+  (($# > 0)) && shift
+  [[ -n "${cmake_command}" ]] || {
+    asc_usage_error "a cmake command is required"
+    return
+  }
+  if (($# == 1)) && [[ "$1" == -h || "$1" == --help ]]; then
+    printf 'Usage: asc cmake %s [OPTIONS]\n' "${cmake_command}"
+    return 0
+  fi
+  case "${cmake_command}" in
+    configure | build | test) asc_run_cmake_operation "${cmake_command}" "$@" ;;
+    workflow)
+      local repository="" configure_preset="" build_preset="" test_preset="" option
+      while (($# > 0)); do
+        case "$1" in
+          --configure-preset | --build-preset | --test-preset)
+            option="$1"
+            (($# >= 2)) || { asc_usage_error "${option} requires a value"; return; }
+            case "${option}" in
+              --configure-preset) configure_preset="$2" ;;
+              --build-preset) build_preset="$2" ;;
+              --test-preset) test_preset="$2" ;;
+            esac
+            shift 2
+            ;;
+          -*) asc_usage_error "unknown cmake workflow option: $1"; return ;;
+          *)
+            [[ -z "${repository}" ]] || { asc_usage_error "cmake workflow takes one repository"; return; }
+            repository="$1"
+            shift
+            ;;
+        esac
+      done
+      [[ -n "${repository}" && -n "${configure_preset}" && -n "${build_preset}" && -n "${test_preset}" ]] || {
+        asc_usage_error "repository and all three workflow presets are required"
+        return
+      }
+      asc_cmake_workflow "${repository}" "${configure_preset}" "${build_preset}" "${test_preset}"
+      ;;
+    presets)
+      local repository="" json_output=false
+      while (($# > 0)); do
+        case "$1" in
+          --json) json_output=true ;;
+          -*) asc_usage_error "unknown cmake presets option: $1"; return ;;
+          *)
+            [[ -z "${repository}" ]] || { asc_usage_error "cmake presets takes one repository"; return; }
+            repository="$1"
+            ;;
+        esac
+        shift
+      done
+      [[ -n "${repository}" ]] || { asc_usage_error "cmake presets requires one repository"; return; }
+      asc_cmake_presets "${repository}" "${json_output}"
+      ;;
+    vendor) asc_run_cmake_vendor "$@" ;;
+    *) asc_usage_error "unknown cmake command: ${cmake_command}"; return ;;
+  esac
+}
+
 asc_main() {
   local config_override="${ASC_OVERRIDE_UNSET}"
   local organization_override="${ASC_OVERRIDE_UNSET}"
@@ -171,6 +420,8 @@ asc_main() {
       doctor) printf 'Usage: asc doctor [--json]\n' ;;
       repo) printf 'Usage: asc repo {list|clone|status|sync} [OPTIONS] [REPOSITORY...]\n' ;;
       configure | build | test) printf 'Usage: asc %s REPOSITORY --preset PRESET\n' "${command}" ;;
+      cmake) printf 'Usage: asc cmake {configure|build|test|workflow|presets|vendor} ...\n' ;;
+      update) printf 'Usage: asc update [--check] [--yes] [--prefix PATH]\n' ;;
       completion) printf 'Usage: asc completion bash\n' ;;
       *)
         asc_usage_error "unknown command: ${command}"
@@ -316,6 +567,25 @@ asc_main() {
         return
       }
       asc_cmake_run "${command}" "${repository}" "${preset}"
+      ;;
+    cmake)
+      asc_run_cmake_group "$@"
+      ;;
+    update)
+      local update_check=false update_yes=false update_prefix=""
+      while (($# > 0)); do
+        case "$1" in
+          --check) update_check=true; shift ;;
+          --yes) update_yes=true; shift ;;
+          --prefix)
+            (($# >= 2)) || { asc_usage_error "--prefix requires a value"; return; }
+            update_prefix="$2"
+            shift 2
+            ;;
+          *) asc_usage_error "unknown update option: $1"; return ;;
+        esac
+      done
+      asc_update_run "${update_check}" "${update_yes}" "${update_prefix}"
       ;;
     completion)
       if (($# != 1)) || [[ "$1" != bash ]]; then
