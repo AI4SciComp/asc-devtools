@@ -45,9 +45,86 @@ CTest are needed only for their corresponding workflow commands.
 | Bash completion | `completion bash` | Yes | Yes | Yes |
 | Manifest-protected install and uninstall | `scripts/install.sh`, `scripts/uninstall.sh` | Yes | Yes | Yes |
 
-## Choosing an implementation
+## Installation
 
-Go produces one static executable and is the reference implementation:
+### Install without administrator privileges
+
+On a shared workstation or supercomputer, install under a directory that you
+own. `~/.local` is the conventional choice:
+
+```bash
+cd branches/go
+./scripts/install.sh --prefix "${HOME}/.local"
+export PATH="${HOME}/.local/bin:${PATH}"
+asc doctor
+```
+
+Add the `PATH` export to `~/.bashrc` to make it persistent, or put it in the
+scheduler job script when shell startup files cannot be changed. A user-owned
+installation can later be updated with `asc update --yes` without `sudo`.
+
+The Go implementation produces one static executable and is the reference
+implementation. Go 1.25+ is needed only to build from source; installing a
+release binary avoids that build requirement:
+
+```bash
+cd branches/go
+./scripts/install.sh --binary /path/to/asc --prefix "${HOME}/.local"
+```
+
+When Go 1.25 is unavailable, choose an implementation supported by the
+software modules on the system. Python uses only the Python 3.11+ standard
+library, while Bash requires Bash 4.4+, Git, curl, and standard Unix tools:
+
+```bash
+# Python implementation
+(cd branches/python && ./scripts/install.sh --prefix "${HOME}/.local")
+
+# Bash implementation
+(cd branches/shell && ./scripts/install.sh --prefix "${HOME}/.local")
+```
+
+Load site-provided dependencies first when necessary, for example with
+`module load git`, `module load python`, or `module load go`.
+
+### Home quotas and restricted compute nodes
+
+If the home filesystem has a small quota, install into any absolute path you
+can write, such as a project allocation, and keep repositories in scratch or
+project storage:
+
+```bash
+ASC_INSTALL_ROOT="/path/you/can/write/asc"
+(cd branches/go && ./scripts/install.sh --prefix "${ASC_INSTALL_ROOT}")
+export PATH="${ASC_INSTALL_ROOT}/bin:${PATH}"
+export ASC_WORKSPACE="/scratch/${USER}/AI4SciComp"
+asc doctor
+```
+
+The workspace can instead be recorded in `~/.config/asc/config.json`:
+
+```json
+{
+  "workspace": "/scratch/YOUR_USERNAME/AI4SciComp"
+}
+```
+
+Run GitHub discovery, cloning, and updates on a login or data-transfer node
+when compute nodes do not have network access. Private repository discovery
+uses `ASC_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`; export credentials only
+when needed rather than storing them in the configuration file. Git transport
+still uses the separately configured SSH key or HTTPS credentials.
+
+The shell implementation may also be run directly from its checkout as
+`./branches/shell/bin/asc`, without installation. Avoid making shared paths
+world-writable; use a personal prefix or a group-owned project directory with
+appropriate group permissions.
+
+### System-wide and staged installation
+
+All installers default to `/usr/local`, accept custom prefix and staging
+options, and maintain manifests so uninstall removes only verified managed
+files. For a system-wide Go installation:
 
 ```bash
 cd branches/go
@@ -56,25 +133,9 @@ sudo ./scripts/install.sh
 
 The Go installer searches conventional system locations even when `sudo`
 restricts `PATH`. For a toolchain installed elsewhere, pass it explicitly with
-`sudo ./scripts/install.sh --go "$(command -v go)"`.
-
-Python 3.11+ uses only the standard library at runtime:
-
-```bash
-cd branches/python
-sudo ./scripts/install.sh
-```
-
-Bash 4.4+ has no Python, jq, or compiled runtime dependency:
-
-```bash
-cd branches/shell
-sudo ./scripts/install.sh
-```
-
-All installers default to `/usr/local`, accept custom prefix and staging
-options, and maintain manifests so uninstall removes only verified managed
-files. Run the matching `sudo ./scripts/uninstall.sh` to remove an installation.
+`sudo ./scripts/install.sh --go "$(command -v go)"`. Run the matching
+`sudo ./scripts/uninstall.sh` to remove a system installation. Packagers can
+use `--destdir` to stage the normal prefix layout without administrator access.
 
 ## GitHub branch workflow
 
