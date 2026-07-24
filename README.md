@@ -1,179 +1,239 @@
 # asc-devtools
 
-This repository maintains three behavior-compatible implementations of the
-`asc` developer CLI. The complete source trees are grouped under `branches/`:
+`asc-devtools` provides one dependency-free Go binary, `asc`, for conservative
+local development workflows across repositories owned by
+[`AI4SciComp`](https://github.com/AI4SciComp). It discovers organization
+repositories through the GitHub REST API, clones missing worktrees, reports Git
+state, performs fast-forward-only updates, and invokes repository-owned CMake
+presets. It also initializes and validates the local coordination workspace,
+scaffolds draft agent definitions, and validates versioned workflow manifests.
 
-| Implementation | Source directory | Standalone branch |
-| --- | --- | --- |
-| Go | [`branches/go`](branches/go) | `go` |
-| Python | [`branches/python`](branches/python) | `python` |
-| Bash | [`branches/shell`](branches/shell) | `shell` |
-
-Each implementation contains its own `README.md`, `generator.md`, source,
-tests, documentation, installation scripts, and verified uninstall support.
-They share the same command surface, JSON configuration, GitHub REST behavior,
-Git safety rules, CMake/CTest invocation, and exit-code contract.
+This is developer infrastructure. It changes remote Git state only through the
+explicit, reviewed `repo save` workflow. It does not change branches, publish
+releases, execute agents or workflows, or implement scientific models.
 
 ## Prerequisites
 
-| Implementation | Required runtime | Build or install requirement |
-| --- | --- | --- |
-| Go | Git for repository commands | Go 1.25+ only when building from source |
-| Python | Python 3.11+ and Git | No third-party Python packages |
-| Bash | Bash 4.4+, Git, curl, and standard Unix tools | No compiled-language toolchain |
+- A released `asc` binary has no language-runtime dependency.
+- Git is required for repository commands.
+- Network access to the GitHub REST API is required for discovery and updates.
+- SSH is required only for SSH clone/push transport and the doctor probe.
+- CMake and CTest are required only by their corresponding workflow commands.
+- Go 1.25 or newer is required only when building from source.
 
-All implementations call the GitHub REST API directly. GitHub CLI (`gh`) is
-neither required nor invoked. Public repositories work without a token; private
-repository discovery requires `ASC_GITHUB_TOKEN`, `GH_TOKEN`, or
-`GITHUB_TOKEN`. SSH is needed only for SSH clone/push transport, while CMake and
-CTest are needed only for their corresponding workflow commands.
+GitHub CLI (`gh`) is neither required nor invoked.
 
-## Functionality
+The binary uses only the Go standard library. There are no linked third-party
+modules, and runtime users do not need Go, Python, Node.js, Ruby, jq, or a package
+manager.
 
-| Functionality | Commands | Go | Python | Bash |
-| --- | --- | :---: | :---: | :---: |
-| Workspace discovery and diagnostics | `workspace`, `doctor` | Yes | Yes | Yes |
-| GitHub repository discovery | `repo list` | Yes | Yes | Yes |
-| Safe repository cloning | `repo clone` | Yes | Yes | Yes |
-| Local Git status reporting | `repo status` | Yes | Yes | Yes |
-| Fast-forward-only synchronization | `repo sync` | Yes | Yes | Yes |
-| Reviewed commit and push workflow with timestamp default | `repo save` | Yes | Yes | Yes |
-| CMake configure, build, and test | `configure`, `build`, `test` | Yes | Yes | Yes |
-| CMake workflows and preset discovery | `cmake workflow`, `cmake presets` | Yes | Yes | Yes |
-| Guarded CMake module vendoring | `cmake vendor` | Yes | Yes | Yes |
-| Verified self-update | `update` | Yes | Yes | Yes |
-| Bash completion | `completion bash` | Yes | Yes | Yes |
-| Manifest-protected install and uninstall | `scripts/install.sh`, `scripts/uninstall.sh` | Yes | Yes | Yes |
-
-## Installation
-
-### Install without administrator privileges
-
-On a shared workstation or supercomputer, install under a directory that you
-own. `~/.local` is the conventional choice:
+## Build and install on WSL2
 
 ```bash
-cd branches/go
-./scripts/install.sh --prefix "${HOME}/.local"
-export PATH="${HOME}/.local/bin:${PATH}"
-asc doctor
+CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+  -ldflags "-s -w -X main.version=0.1.0" \
+  -o ./dist/asc ./cmd/asc
+sudo ./scripts/install.sh --binary ./dist/asc
+asc --version
 ```
 
-Add the `PATH` export to `~/.bashrc` to make it persistent, or put it in the
-scheduler job script when shell startup files cannot be changed. A user-owned
-installation can later be updated with `asc update --yes` without `sudo`.
+The default prefix is `/usr/local`, so the executable is installed at
+`/usr/local/bin/asc` and is normally available on `PATH`. The installer also
+adds Bash completion and a hash manifest used to protect upgrades and removal.
 
-The Go implementation produces one static executable and is the reference
-implementation. Go 1.25+ is needed only to build from source; installing a
-release binary avoids that build requirement:
+To build and install in one step, including when `sudo` omits the conventional
+`/usr/local/go/bin` directory from `PATH`:
 
 ```bash
-cd branches/go
-./scripts/install.sh --binary /path/to/asc --prefix "${HOME}/.local"
-```
-
-When Go 1.25 is unavailable, choose an implementation supported by the
-software modules on the system. Python uses only the Python 3.11+ standard
-library, while Bash requires Bash 4.4+, Git, curl, and standard Unix tools:
-
-```bash
-# Python implementation
-(cd branches/python && ./scripts/install.sh --prefix "${HOME}/.local")
-
-# Bash implementation
-(cd branches/shell && ./scripts/install.sh --prefix "${HOME}/.local")
-```
-
-Load site-provided dependencies first when necessary, for example with
-`module load git`, `module load python`, or `module load go`.
-
-### Home quotas and restricted compute nodes
-
-If the home filesystem has a small quota, install into any absolute path you
-can write, such as a project allocation, and keep repositories in scratch or
-project storage:
-
-```bash
-ASC_INSTALL_ROOT="/path/you/can/write/asc"
-(cd branches/go && ./scripts/install.sh --prefix "${ASC_INSTALL_ROOT}")
-export PATH="${ASC_INSTALL_ROOT}/bin:${PATH}"
-export ASC_WORKSPACE="/scratch/${USER}/AI4SciComp"
-asc doctor
-```
-
-The workspace can instead be recorded in `~/.config/asc/config.json`:
-
-```json
-{
-  "workspace": "/scratch/YOUR_USERNAME/AI4SciComp"
-}
-```
-
-Run GitHub discovery, cloning, and updates on a login or data-transfer node
-when compute nodes do not have network access. Private repository discovery
-uses `ASC_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`; export credentials only
-when needed rather than storing them in the configuration file. Git transport
-still uses the separately configured SSH key or HTTPS credentials.
-
-The shell implementation may also be run directly from its checkout as
-`./branches/shell/bin/asc`, without installation. Avoid making shared paths
-world-writable; use a personal prefix or a group-owned project directory with
-appropriate group permissions.
-
-### System-wide and staged installation
-
-All installers default to `/usr/local`, accept custom prefix and staging
-options, and maintain manifests so uninstall removes only verified managed
-files. For a system-wide Go installation:
-
-```bash
-cd branches/go
 sudo ./scripts/install.sh
 ```
 
-The Go installer searches conventional system locations even when `sudo`
-restricts `PATH`. For a toolchain installed elsewhere, pass it explicitly with
-`sudo ./scripts/install.sh --go "$(command -v go)"`. Run the matching
-`sudo ./scripts/uninstall.sh` to remove a system installation. Packagers can
-use `--destdir` to stage the normal prefix layout without administrator access.
-
-## GitHub branch workflow
-
-This repository has one combined `main` branch and three standalone branches,
-so use the repository Makefile instead of a generic single-branch save command.
-The workflow requires GNU Make, Bash, Git, rsync, and tar; it never invokes
-GitHub CLI.
+The installer also accepts an explicit Go executable for toolchains installed
+elsewhere:
 
 ```bash
-make github-status
-make github-import
-git diff
-make github-publish
+sudo ./scripts/install.sh --go "$(command -v go)"
 ```
 
-`github-import` requires a clean, up-to-date `main` checkout and copies the
-remote `go`, `python`, and `shell` trees into their matching `branches/*`
-directories for review. It does not commit or push.
-
-`github-publish` stages all intended `main` changes, commits with
-`Updated at YYYY-MM-DD HH:MM:SS` by default, derives standalone commits from the
-committed `branches/*` trees, verifies exact tree equality, and pushes every
-changed branch with one atomic Git push. A rejected branch therefore leaves all
-remote refs unchanged; the local commit remains available to inspect or retry.
-Override the message with:
+Use another system prefix or a packaging staging root explicitly:
 
 ```bash
-make github-publish MSG="Describe the coordinated update"
+sudo ./scripts/install.sh --binary ./dist/asc --prefix /opt/asc
+./scripts/install.sh --binary ./dist/asc --destdir "${DESTDIR}"
 ```
 
-Use `make github-check` to require a clean published `main` and exact parity with
-all three standalone branches. `make help` lists the complete workflow.
+Uninstall the exact managed files with:
 
-## Repository policy
+```bash
+sudo ./scripts/uninstall.sh
+```
 
-- `main` is the combined source view and runs all implementation test suites.
-- `go`, `python`, and `shell` are standalone distributable trees.
-- Behavioral changes must be applied to all affected implementations and tested
-  from both the standalone branch and the corresponding `branches/*` directory.
+Neither script downloads tools, invokes `sudo`, changes shell configuration, or
+recursively deletes a prefix. See [installation.md](docs/installation.md).
+
+## Authentication
+
+`AI4SciComp` is the repository owner. `escapetiger` is a personal account that
+may supply credentials; authentication never changes repository ownership.
+
+Public REST discovery works without authentication. Private repositories and
+higher API limits require a token, selected in this order:
+
+```text
+ASC_GITHUB_TOKEN
+GH_TOKEN
+GITHUB_TOKEN
+```
+
+To avoid putting a token in shell history:
+
+```bash
+read -rsp 'GitHub token: ' ASC_GITHUB_TOKEN
+printf '\n'
+export ASC_GITHUB_TOKEN
+```
+
+`asc` sends the token only in the GitHub API authorization header, never stores
+or prints it. REST API authentication is distinct from Git transport:
+
+- SSH clone URLs use a GitHub-associated SSH key.
+- HTTPS clone URLs use Git's configured HTTPS credentials.
+- The REST API uses the token above.
+
+## Configuration
+
+The default file is `~/.config/asc/config.json`; select another with
+`ASC_CONFIG` or global `--config PATH`.
+
+```json
+{
+  "organization": "AI4SciComp",
+  "workspace": "~/AI4SciComp",
+  "repositoryPrefix": "asc-",
+  "includeDotGitHub": true,
+  "cloneProtocol": "ssh",
+  "remote": "origin",
+  "cmake": {
+    "vendorDirectory": "cmake/asc",
+    "sourceRepository": "asc-cmake"
+  }
+}
+```
+
+Precedence is CLI, environment, JSON file, then default. Supported environment
+overrides are `ASC_ORGANIZATION`, `ASC_WORKSPACE`, `ASC_REPOSITORY_PREFIX`,
+`ASC_INCLUDE_DOT_GITHUB`, `ASC_CLONE_PROTOCOL`, and `ASC_REMOTE`. Unknown JSON
+fields and malformed values are rejected.
+
+Global options must precede the command:
+
+```text
+--config PATH --organization NAME --workspace PATH --no-color
+```
+
+## Quick start
+
+```bash
+asc doctor
+asc workspace
+asc workspace init --dry-run
+asc workspace init
+asc workspace validate --json
+asc agent init verification-reviewer --dry-run
+asc agent init verification-reviewer
+asc workflow validate
+asc repo list
+asc repo list --json
+asc repo clone asc-cpp --protocol ssh
+asc repo status
+asc repo status --json
+asc repo sync --dry-run
+asc repo sync
+asc repo save asc-cpp --dry-run
+asc repo save asc-cpp
+asc repo save asc-cpp --message "Describe the change"
+asc update --check
+asc configure asc-cpp --preset dev
+asc build asc-cpp --preset dev
+asc test asc-cpp --preset dev
+asc cmake workflow asc-cpp \
+  --configure-preset dev --build-preset dev --test-preset dev
+asc cmake presets asc-cpp
+asc cmake vendor status asc-cpp
+asc cmake vendor plan asc-cpp
+asc cmake vendor apply asc-cpp --yes
+source <(asc completion bash)
+```
+
+`asc update` checks the latest GitHub release and updates the currently managed
+installation after confirmation. Use `asc update --check` for a read-only check,
+or `sudo asc update --yes` when the installation prefix requires root access.
+The updater requires a release asset named for the current OS and architecture
+plus `SHA256SUMS`; it verifies the archive before running the same hash-guarded
+installer used above. It never invokes `sudo` itself.
+
+Clone without names processes every eligible API repository. Status and sync
+without names process managed Git worktrees that are direct workspace children.
+
+`repo sync` is download-only: it fetches and fast-forwards clean worktrees from
+their upstream branches. `repo save` is upload-only and intentionally operates
+on exactly one repository: it reviews a plan, fetches to detect remote changes,
+stages all local changes, commits, and pushes the tracked branch. Without
+`--message`, the local-time message is `Updated at YYYY-MM-DD HH:MM:SS`. It
+refuses remote-ahead, diverged, detached, conflicted, or untracked-branch states.
+
+## Safety guarantees
+
+- External commands use `os/exec` argument slices; no shell evaluates input.
+- Repository names are validated GitHub path segments, not filesystem paths.
+- Destinations are verified direct children, and repository symlinks are refused.
+- Clone never deletes, replaces, or merges existing destination data.
+- Existing worktrees must point at the expected API repository.
+- Status is local, read-only, nonrecursive, and uses porcelain-v2 output.
+- Sync skips dirty, detached, no-upstream, wrong-remote, and divergent states.
+- Sync performs only fetch plus `merge --ff-only`; dry-run performs neither.
+- Save requires one repository, uses a timestamp message by default, supports a
+  read-only plan, prompts by default, fetches before staging, and preserves a
+  local commit if push fails.
+- Outside `repo save`, there is no reset, clean, stash, rebase, checkout, commit,
+  push, force operation, telemetry, or credential storage.
+- Workspace initialization creates only the documented coordination directories,
+  reports every target, rejects symlinks and files, and rolls back directories
+  created by a failed invocation.
+- Agent initialization validates a single path-safe name, supports dry-run, and
+  refuses to replace an existing definition.
+- Workflow validation is read-only, rejects symlinks and unknown JSON fields,
+  and enforces the checked-in schema-v1 structure and state references.
+- Vendoring reads only a local `asc-cmake` checkout, verifies exact SHA-256
+  content, refuses locally modified managed files, and preserves unmanaged files.
+- GitHub responses and error bodies have size limits and HTTP requests time out.
+
+See [commands.md](docs/commands.md) and
+[architecture.md](docs/architecture.md) for exact behavior.
+
+## Development
+
+```bash
+gofmt -w ./cmd ./internal
+go vet ./...
+go test ./...
+go test -race ./...
+CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
+```
+
+Tests use only the standard `testing` package, `httptest`, fake process runners,
+and temporary local Git repositories. They never use live GitHub or user state.
+
+Go is the sole runtime implementation. The removed Python and Bash source trees
+remain recoverable from repository history and the preservation bundle recorded
+in [the migration ledger](docs/migration/go-only.md). Small installer,
+packaging, and completion shell files remain intentionally.
+
+The current dynamic workspace includes `asc-devtools`, `asc-cmake`, `asc-cpp`,
+`asc-xde`, `asc-kinetic`, `asc-lean`, and `asc-lab`, plus optional `.github`.
+Discovery remains API-driven rather than hard-coded. Scientific repositories own
+their `CMakePresets.json`; `asc-cmake` supplies shared modules for offline,
+reproducible vendoring without moving build policy into this CLI. Configure never
+updates vendored files automatically, and users review and commit vendor changes.
 
 Licensed under Apache-2.0. See [LICENSE](LICENSE).
