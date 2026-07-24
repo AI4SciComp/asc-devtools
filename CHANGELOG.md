@@ -12,6 +12,8 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ### Added
 
+- A repository Makefile with development, installation, conservative Git,
+  GitHub CLI, and `asc` workflow shortcuts.
 - Dependency-free Go `asc` binary with strict JSON configuration and direct
   GitHub REST discovery.
 - Safe repository clone, porcelain-v2 status, dry-run and fast-forward-only

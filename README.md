@@ -176,6 +176,26 @@ See the [command reference](docs/commands.md) and the comprehensive
 
 ## Development
 
+The Makefile collects the common development, installation, Git, GitHub CLI,
+and `asc` workflows:
+
+```bash
+make help
+make check
+make build
+make git-status
+make git-save MSG="Describe the change"
+make gh-pr-create
+make gh-pr-checks
+```
+
+`make git-sync` accepts only a clean worktree and uses `git pull --ff-only`.
+`make gh-pr-create` pushes the current feature branch and creates a draft PR by
+default; pass `DRAFT=0` to create a ready-for-review PR. Run `make git-help` or
+`make gh-help` for the complete shortcut list.
+
+The equivalent commands without Make are:
+
 ```bash
 gofmt -w ./cmd ./internal
 go mod tidy

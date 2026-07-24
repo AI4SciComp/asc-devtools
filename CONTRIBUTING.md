@@ -4,12 +4,19 @@ The active implementation requires Go 1.25 or newer and uses only the standard
 library. Do not add third-party module requirements or move application logic
 into shell.
 
-Keep the canonical v0.1 surface limited to doctor, workspace, repository
+Keep the canonical v0.1 `asc` surface limited to doctor, workspace, repository
 list/clone/status/sync, top-level configure/build/test, and Bash completion.
-Do not add commands that reset, clean, stash, check out, rebase, commit, push,
-delete branches, force updates, publish releases, or open pull requests.
+Do not add `asc` commands that reset, clean, stash, check out, rebase, commit,
+push, delete branches, force updates, publish releases, or open pull requests.
+Developer-only Make targets may wrap explicit Git and GitHub CLI workflows.
 
 Run:
+
+```bash
+make check
+```
+
+The individual commands behind that target are:
 
 ```bash
 gofmt -w ./cmd ./internal
