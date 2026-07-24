@@ -1,10 +1,12 @@
+# Go build and test artifacts.
+/asc
+/dist/
+/coverage/
+*.coverprofile
+*.test
+*.out
+
+# Editor and operating-system files.
+.DS_Store
 *.swp
 *~
-.DS_Store
-coverage/
-dist/
-tmp/
-**/__pycache__/
-**/*.egg-info/
-**/.mypy_cache/
-**/.ruff_cache/

@@ -1,179 +1,191 @@
 # asc-devtools
 
-This repository maintains three behavior-compatible implementations of the
-`asc` developer CLI. The complete source trees are grouped under `branches/`:
+`asc-devtools` provides `asc`, a small dependency-free Go CLI for conservative
+local operations across repositories in the
+[`AI4SciComp`](https://github.com/AI4SciComp) organization.
 
-| Implementation | Source directory | Standalone branch |
-| --- | --- | --- |
-| Go | [`branches/go`](branches/go) | `go` |
-| Python | [`branches/python`](branches/python) | `python` |
-| Bash | [`branches/shell`](branches/shell) | `shell` |
+It can discover and clone organization repositories, report local Git status,
+download clean fast-forwards, and invoke repository-owned CMake/CTest presets.
+It is developer infrastructure: it does not implement scientific models, run
+agents, publish releases, open pull requests, or modify remote Git history.
 
-Each implementation contains its own `README.md`, `generator.md`, source,
-tests, documentation, installation scripts, and verified uninstall support.
-They share the same command surface, JSON configuration, GitHub REST behavior,
-Git safety rules, CMake/CTest invocation, and exit-code contract.
+## Requirements
 
-## Prerequisites
+- Git for repository commands.
+- Network access for GitHub discovery, clone, and sync.
+- CMake for `configure` and `build`; CTest for `test`.
+- Go 1.25 or newer only when building from source.
+- Bash and `sha256sum` only for the supplied install/uninstall scripts.
 
-| Implementation | Required runtime | Build or install requirement |
-| --- | --- | --- |
-| Go | Git for repository commands | Go 1.25+ only when building from source |
-| Python | Python 3.11+ and Git | No third-party Python packages |
-| Bash | Bash 4.4+, Git, curl, and standard Unix tools | No compiled-language toolchain |
+The binary uses only the Go standard library. GitHub CLI (`gh`) is not required
+or invoked at runtime.
 
-All implementations call the GitHub REST API directly. GitHub CLI (`gh`) is
-neither required nor invoked. Public repositories work without a token; private
-repository discovery requires `ASC_GITHUB_TOKEN`, `GH_TOKEN`, or
-`GITHUB_TOKEN`. SSH is needed only for SSH clone/push transport, while CMake and
-CTest are needed only for their corresponding workflow commands.
+## Install on Ubuntu or WSL2
 
-## Functionality
-
-| Functionality | Commands | Go | Python | Bash |
-| --- | --- | :---: | :---: | :---: |
-| Workspace discovery and diagnostics | `workspace`, `doctor` | Yes | Yes | Yes |
-| GitHub repository discovery | `repo list` | Yes | Yes | Yes |
-| Safe repository cloning | `repo clone` | Yes | Yes | Yes |
-| Local Git status reporting | `repo status` | Yes | Yes | Yes |
-| Fast-forward-only synchronization | `repo sync` | Yes | Yes | Yes |
-| Reviewed commit and push workflow with timestamp default | `repo save` | Yes | Yes | Yes |
-| CMake configure, build, and test | `configure`, `build`, `test` | Yes | Yes | Yes |
-| CMake workflows and preset discovery | `cmake workflow`, `cmake presets` | Yes | Yes | Yes |
-| Guarded CMake module vendoring | `cmake vendor` | Yes | Yes | Yes |
-| Verified self-update | `update` | Yes | Yes | Yes |
-| Bash completion | `completion bash` | Yes | Yes | Yes |
-| Manifest-protected install and uninstall | `scripts/install.sh`, `scripts/uninstall.sh` | Yes | Yes | Yes |
-
-## Installation
-
-### Install without administrator privileges
-
-On a shared workstation or supercomputer, install under a directory that you
-own. `~/.local` is the conventional choice:
+Build and install under the default `/usr/local` prefix:
 
 ```bash
-cd branches/go
-./scripts/install.sh --prefix "${HOME}/.local"
-export PATH="${HOME}/.local/bin:${PATH}"
+CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+  -ldflags "-s -w -X main.version=0.1.0" \
+  -o ./asc ./cmd/asc
+sudo ./scripts/install.sh --binary ./asc
+asc --version
+```
+
+The installer places these exact managed files:
+
+```text
+/usr/local/bin/asc
+/usr/local/share/bash-completion/completions/asc
+/usr/local/share/asc-devtools/install-manifest
+```
+
+It refuses to overwrite a modified managed file or an unrelated installation.
+For a user-local install, use `--prefix "${HOME}/.local"` and ensure
+`~/.local/bin` is on `PATH`. See [installation](docs/installation.md).
+
+## Five-minute start
+
+```bash
 asc doctor
+asc workspace
+asc repo list
+asc repo clone asc-cpp --protocol ssh
+asc repo status
+asc repo sync --dry-run
+asc repo sync
+asc configure asc-cpp --preset dev
+asc build asc-cpp --preset dev
+asc test asc-cpp --preset dev
 ```
 
-Add the `PATH` export to `~/.bashrc` to make it persistent, or put it in the
-scheduler job script when shell startup files cannot be changed. A user-owned
-installation can later be updated with `asc update --yes` without `sudo`.
+`~/AI4SciComp` is the default umbrella. Its children are independent Git
+repositories:
 
-The Go implementation produces one static executable and is the reference
-implementation. Go 1.25+ is needed only to build from source; installing a
-release binary avoids that build requirement:
-
-```bash
-cd branches/go
-./scripts/install.sh --binary /path/to/asc --prefix "${HOME}/.local"
+```text
+~/AI4SciComp/
+├── asc-devtools/
+├── asc-cmake/
+├── asc-cpp/
+├── asc-xde/
+├── asc-kinetic/
+├── asc-lean/
+└── asc-lab/
 ```
 
-When Go 1.25 is unavailable, choose an implementation supported by the
-software modules on the system. Python uses only the Python 3.11+ standard
-library, while Bash requires Bash 4.4+, Git, curl, and standard Unix tools:
+The umbrella itself is not initialized as a Git repository by `asc`.
 
-```bash
-# Python implementation
-(cd branches/python && ./scripts/install.sh --prefix "${HOME}/.local")
+## Configuration
 
-# Bash implementation
-(cd branches/shell && ./scripts/install.sh --prefix "${HOME}/.local")
-```
-
-Load site-provided dependencies first when necessary, for example with
-`module load git`, `module load python`, or `module load go`.
-
-### Home quotas and restricted compute nodes
-
-If the home filesystem has a small quota, install into any absolute path you
-can write, such as a project allocation, and keep repositories in scratch or
-project storage:
-
-```bash
-ASC_INSTALL_ROOT="/path/you/can/write/asc"
-(cd branches/go && ./scripts/install.sh --prefix "${ASC_INSTALL_ROOT}")
-export PATH="${ASC_INSTALL_ROOT}/bin:${PATH}"
-export ASC_WORKSPACE="/scratch/${USER}/AI4SciComp"
-asc doctor
-```
-
-The workspace can instead be recorded in `~/.config/asc/config.json`:
+The default file is `~/.config/asc/config.json`:
 
 ```json
 {
-  "workspace": "/scratch/YOUR_USERNAME/AI4SciComp"
+  "organization": "AI4SciComp",
+  "workspace": "~/AI4SciComp",
+  "repositoryPrefix": "asc-",
+  "includeDotGitHub": true,
+  "cloneProtocol": "ssh",
+  "remote": "origin"
 }
 ```
 
-Run GitHub discovery, cloning, and updates on a login or data-transfer node
-when compute nodes do not have network access. Private repository discovery
-uses `ASC_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`; export credentials only
-when needed rather than storing them in the configuration file. Git transport
-still uses the separately configured SSH key or HTTPS credentials.
+Precedence is command-line option, environment variable, JSON file, then
+built-in default. Global options must precede the command:
 
-The shell implementation may also be run directly from its checkout as
-`./branches/shell/bin/asc`, without installation. Avoid making shared paths
-world-writable; use a personal prefix or a group-owned project directory with
-appropriate group permissions.
-
-### System-wide and staged installation
-
-All installers default to `/usr/local`, accept custom prefix and staging
-options, and maintain manifests so uninstall removes only verified managed
-files. For a system-wide Go installation:
-
-```bash
-cd branches/go
-sudo ./scripts/install.sh
+```text
+--config PATH
+--organization NAME
+--workspace PATH
+--no-color
+--help
+--version
 ```
 
-The Go installer searches conventional system locations even when `sudo`
-restricts `PATH`. For a toolchain installed elsewhere, pass it explicitly with
-`sudo ./scripts/install.sh --go "$(command -v go)"`. Run the matching
-`sudo ./scripts/uninstall.sh` to remove a system installation. Packagers can
-use `--destdir` to stage the normal prefix layout without administrator access.
+Environment overrides are `ASC_CONFIG`, `ASC_ORGANIZATION`, `ASC_WORKSPACE`,
+`ASC_REPOSITORY_PREFIX`, `ASC_INCLUDE_DOT_GITHUB`, `ASC_CLONE_PROTOCOL`, and
+`ASC_REMOTE`. Unknown JSON fields and unsafe paths or names are rejected.
 
-## GitHub branch workflow
+## Authentication
 
-This repository has one combined `main` branch and three standalone branches,
-so use the repository Makefile instead of a generic single-branch save command.
-The workflow requires GNU Make, Bash, Git, rsync, and tar; it never invokes
-GitHub CLI.
+Public repository discovery requires no token. For private repositories or
+higher API limits, `asc` selects the first nonempty value in this order:
 
-```bash
-make github-status
-make github-import
-git diff
-make github-publish
+```text
+ASC_GITHUB_TOKEN
+GH_TOKEN
+GITHUB_TOKEN
 ```
 
-`github-import` requires a clean, up-to-date `main` checkout and copies the
-remote `go`, `python`, and `shell` trees into their matching `branches/*`
-directories for review. It does not commit or push.
-
-`github-publish` stages all intended `main` changes, commits with
-`Updated at YYYY-MM-DD HH:MM:SS` by default, derives standalone commits from the
-committed `branches/*` trees, verifies exact tree equality, and pushes every
-changed branch with one atomic Git push. A rejected branch therefore leaves all
-remote refs unchanged; the local commit remains available to inspect or retry.
-Override the message with:
+Set one without placing the value in shell history:
 
 ```bash
-make github-publish MSG="Describe the coordinated update"
+read -rsp 'GitHub token: ' ASC_GITHUB_TOKEN
+printf '\n'
+export ASC_GITHUB_TOKEN
 ```
 
-Use `make github-check` to require a clean published `main` and exact parity with
-all three standalone branches. `make help` lists the complete workflow.
+The token is sent only as a GitHub REST authorization header and is never
+persisted or printed. REST authentication is separate from Git transport:
 
-## Repository policy
+- SSH clones use the API-provided SSH URL and your SSH key.
+- HTTPS clones use the API-provided HTTPS URL and Git's credential handling.
+- Repository discovery uses the REST token above.
 
-- `main` is the combined source view and runs all implementation test suites.
-- `go`, `python`, and `shell` are standalone distributable trees.
-- Behavioral changes must be applied to all affected implementations and tested
-  from both the standalone branch and the corresponding `branches/*` directory.
+## Command surface
+
+```text
+asc --help
+asc --version
+asc doctor [--json]
+asc workspace
+asc repo list [--json]
+asc repo clone [REPOSITORY...] [--protocol ssh|https]
+asc repo status [REPOSITORY...] [--json]
+asc repo sync [REPOSITORY...] [--dry-run]
+asc configure REPOSITORY --preset PRESET
+asc build REPOSITORY --preset PRESET
+asc test REPOSITORY --preset PRESET
+asc completion bash
+```
+
+See the [command reference](docs/commands.md) and the comprehensive
+[user guide](docs/user-guide.md).
+
+## Safety
+
+- External programs receive argument slices; no shell evaluates user input.
+- Repository targets must be direct workspace children.
+- Repository symlinks and path traversal are refused.
+- Clone never overwrites an existing destination.
+- Local status uses Git porcelain v2 and does not access the network.
+- Sync skips dirty, detached, no-upstream, wrong-remote, and divergent
+  repositories.
+- Dry-run sync performs neither fetch nor merge.
+- Real sync performs only `git fetch` and `git merge --ff-only`.
+- `asc` never resets, cleans, stashes, checks out, rebases, commits, pushes,
+  deletes branches, resolves conflicts, or edits global configuration.
+- Help, version, workspace, completion, and local status avoid unnecessary
+  network access.
+- JSON is deterministic, color-free, and written only to stdout.
+
+## Development
+
+```bash
+gofmt -w ./cmd ./internal
+go mod tidy
+go vet ./...
+go test ./...
+go test -race ./...
+CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
+/tmp/asc --help
+/tmp/asc --version
+scripts/test_install.sh /tmp/asc
+git diff --check
+```
+
+Go is the sole runtime implementation. Legacy implementation history and its
+disposition are recorded in the
+[Go-only migration ledger](docs/migration/go-only.md).
 
 Licensed under Apache-2.0. See [LICENSE](LICENSE).
