@@ -45,7 +45,8 @@ Checks:
 - resolved configuration and workspace usability;
 - required Git availability;
 - optional CMake and CTest availability;
-- REST token availability;
+- REST authentication source (environment token, optional `gh` login, or
+  anonymous access);
 - GitHub organization API access;
 - SSH executable and bounded GitHub authentication probe;
 - whether `asc` is on `PATH`.

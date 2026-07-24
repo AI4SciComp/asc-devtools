@@ -2,7 +2,7 @@
 
 `asc` is one `CGO_ENABLED=0` Go binary built with the standard library only.
 Git is its sole universal external executable; CMake and CTest are required only
-by their wrappers.
+by their wrappers. GitHub CLI is an optional REST credential provider.
 
 ## Boundaries
 
@@ -46,8 +46,10 @@ Domain packages do not import CLI presentation.
 6. Errors return an exit code; only `main` terminates the process.
 
 `workspace` and `completion` require no external command. `repo status` uses
-only local Git. `repo list` and clone discovery use REST. Doctor intentionally
-uses REST and a bounded SSH probe. Real sync uses Git network transport.
+only local Git. `repo list` and clone discovery use REST and may query an
+existing `gh` login when token environment variables are unset. Doctor
+intentionally uses REST and a bounded SSH probe. Real sync uses Git network
+transport.
 
 ## Configuration and identity
 
@@ -60,9 +62,10 @@ prefix policy, except for optional `.github`. Organization, repository, remote,
 path, environment, API response, and Git output values are all treated as
 untrusted.
 
-The API token remains in memory, is sent only in an authorization header, and
-is omitted from JSON and errors. Git transport credentials remain Git's
-responsibility.
+The API token is selected from `ASC_GITHUB_TOKEN`, `GH_TOKEN`,
+`GITHUB_TOKEN`, or an optional `gh auth token --hostname github.com` fallback.
+It remains in memory, is sent only in an authorization header, and is omitted
+from JSON and errors. Git transport credentials remain Git's responsibility.
 
 ## Path trust model
 

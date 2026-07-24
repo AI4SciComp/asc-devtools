@@ -66,7 +66,8 @@ Build and installer:
 - Bash and `sha256sum` for the supplied install/uninstall scripts.
 
 The `asc` binary contains no third-party Go module. Runtime users do not need
-Python, Node.js, Ruby, `jq`, a package manager, or GitHub CLI.
+Python, Node.js, Ruby, `jq`, or a package manager. GitHub CLI is optional and
+can supply credentials from an existing login for private REST discovery.
 
 ## Installation on Windows 11 with WSL2 Ubuntu
 
@@ -266,15 +267,20 @@ asc repo status asc-cpp --json
 ### REST authentication
 
 Public discovery works anonymously. Private repositories and higher rate limits
-need a token. The first nonempty variable wins:
+need a token. `asc` uses the first available source:
 
 ```text
 ASC_GITHUB_TOKEN
 GH_TOKEN
 GITHUB_TOKEN
+gh auth token --hostname github.com
 ```
 
-Enter a token without putting its value in shell history:
+The environment variables take precedence. The final source is attempted only
+when `gh` is installed, already authenticated, and all three variables are
+empty. A missing or unauthenticated `gh` is treated as anonymous access.
+
+Enter a token directly without putting its value in shell history:
 
 ```bash
 read -rsp 'GitHub token: ' ASC_GITHUB_TOKEN
@@ -284,8 +290,9 @@ export ASC_GITHUB_TOKEN
 
 Use a token with only the access needed to read the target organization
 repositories. Do not put a real token in `config.json`, documentation, command
-arguments, or committed shell files. `asc` keeps the value in memory, sends it
-only in the `Authorization` header, and omits it from output and errors.
+arguments, or committed shell files. Whether selected from the environment or
+`gh`, `asc` keeps the value in memory, sends it only in the `Authorization`
+header, and omits it from output and errors.
 
 ### SSH versus HTTPS
 
@@ -572,14 +579,16 @@ Symptoms include `401`, `403`, or private repositories missing from `repo list`.
 asc doctor
 ```
 
-Set a readable token with `ASC_GITHUB_TOKEN`. A `401` means authentication
-failed. A non-rate-limit `403` usually means organization/repository permission
-is missing. A `404` can mean the organization is hidden from the token.
+Set a readable token with `ASC_GITHUB_TOKEN`, or confirm that `gh auth status`
+shows an authenticated GitHub account. A `401` means authentication failed. A
+non-rate-limit `403` usually means organization/repository permission is
+missing. A `404` can mean the organization is hidden from the token.
 
 ### API rate limit
 
 An unauthenticated request has a lower limit. When `asc` reports rate limiting,
-wait for reset or set `ASC_GITHUB_TOKEN`. The token itself is never printed.
+wait for reset, set `ASC_GITHUB_TOKEN`, or authenticate `gh`. The token itself
+is never printed.
 
 ### SSH clone failure
 

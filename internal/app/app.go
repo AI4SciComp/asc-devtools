@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/AI4SciComp/asc-devtools/internal/cmake"
 	"github.com/AI4SciComp/asc-devtools/internal/completion"
@@ -348,7 +349,22 @@ func runDoctor(ctx context.Context, cfg config.Config, arguments []string, depen
 	return ExitSuccess
 }
 
-func githubClient(_ context.Context, cfg config.Config, dependencies Dependencies) (*github.Client, config.Config) {
+func githubClient(ctx context.Context, cfg config.Config, dependencies Dependencies) (*github.Client, config.Config) {
+	if cfg.GitHubToken == "" {
+		result, err := dependencies.Runner.Run(ctx, process.Command{
+			Name: "gh",
+			Args: []string{"auth", "token", "--hostname", "github.com"},
+		})
+		if err == nil {
+			token := strings.TrimSpace(result.Stdout)
+			if token != "" && !strings.ContainsFunc(token, func(character rune) bool {
+				return unicode.IsSpace(character) || unicode.IsControl(character)
+			}) {
+				cfg.GitHubToken = token
+				cfg.GitHubTokenSource = "gh auth token"
+			}
+		}
+	}
 	client := github.NewClient(cfg.GitHubToken, dependencies.VersionInfo.Version)
 	if dependencies.HTTPClient != nil {
 		client.HTTPClient = dependencies.HTTPClient

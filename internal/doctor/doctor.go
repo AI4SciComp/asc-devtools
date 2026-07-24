@@ -51,7 +51,7 @@ func (s Service) Run(ctx context.Context) []Check {
 	if s.Config.GitHubToken != "" {
 		checks = append(checks, Check{Name: "api-authentication", Status: "pass", Detail: "GitHub API token is available from " + s.Config.GitHubTokenSource})
 	} else {
-		checks = append(checks, Check{Name: "api-authentication", Status: "warning", Detail: "using unauthenticated public GitHub API access", Remedy: "set ASC_GITHUB_TOKEN for private repositories and higher rate limits"})
+		checks = append(checks, Check{Name: "api-authentication", Status: "warning", Detail: "using unauthenticated public GitHub API access", Remedy: "set ASC_GITHUB_TOKEN or authenticate gh for private repositories and higher rate limits"})
 	}
 	if s.GitHub == nil {
 		checks = append(checks, Check{Name: "github-api", Status: "failure", Detail: "GitHub API client is unavailable"})
