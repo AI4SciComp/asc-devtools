@@ -4,6 +4,12 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Reused an existing authenticated GitHub CLI session when token environment
+  variables are unset, restoring private repository listing and clone
+  discovery without requiring duplicate credential configuration.
+
 ### Added
 
 - Dependency-free Go `asc` binary with strict JSON configuration and direct

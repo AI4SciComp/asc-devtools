@@ -26,12 +26,15 @@ type appRunner struct {
 	calls    []process.Command
 	failName string
 	failCode int
+	ghToken  string
 }
 
 func (r *appRunner) Run(_ context.Context, command process.Command) (process.Result, error) {
 	r.calls = append(r.calls, command)
 	joined := strings.Join(command.Args, " ")
 	switch {
+	case command.Name == "gh" && joined == "auth token --hostname github.com" && r.ghToken != "":
+		return process.Result{Stdout: r.ghToken + "\n"}, nil
 	case strings.Contains(joined, "rev-parse --is-inside-work-tree"):
 		return process.Result{Stdout: "true\n"}, nil
 	case strings.Contains(joined, "status --porcelain=v2"):
@@ -157,6 +160,57 @@ func TestRepositoryListJSON(t *testing.T) {
 	if len(repositories) != 2 || repositories[0]["name"] != "asc-a" || repositories[1]["name"] != "asc-z" {
 		t.Fatalf("JSON repositories = %v", repositories)
 	}
+}
+
+func TestRepositoryDiscoveryUsesGitHubCLITokenFallback(t *testing.T) {
+	runner := &appRunner{ghToken: "gh-fallback-token"}
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if authorization := request.Header.Get("Authorization"); authorization != "Bearer gh-fallback-token" {
+			t.Errorf("Authorization = %q", authorization)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`[{"name":"asc-cpp","archived":false}]`)),
+		}, nil
+	})}
+	code, stdout, stderr := runApp(t, []string{"repo", "list", "--json"}, nil, runner, client)
+	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, `"name": "asc-cpp"`) {
+		t.Fatalf("repo list = %d, %q, %q", code, stdout, stderr)
+	}
+	if !runnerCalled(runner, "gh", "auth token --hostname github.com") {
+		t.Fatalf("gh token fallback was not called: %+v", runner.calls)
+	}
+}
+
+func TestRepositoryDiscoveryPrefersEnvironmentToken(t *testing.T) {
+	runner := &appRunner{ghToken: "gh-fallback-token"}
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if authorization := request.Header.Get("Authorization"); authorization != "Bearer environment-token" {
+			t.Errorf("Authorization = %q", authorization)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`[]`)),
+		}, nil
+	})}
+	code, _, stderr := runApp(t, []string{"repo", "list"}, map[string]string{"ASC_GITHUB_TOKEN": "environment-token"}, runner, client)
+	if code != ExitSuccess || stderr != "" {
+		t.Fatalf("repo list = %d, %q", code, stderr)
+	}
+	if runnerCalled(runner, "gh", "auth token --hostname github.com") {
+		t.Fatalf("gh token fallback was called despite environment token: %+v", runner.calls)
+	}
+}
+
+func runnerCalled(runner *appRunner, name, arguments string) bool {
+	for _, call := range runner.calls {
+		if call.Name == name && strings.Join(call.Args, " ") == arguments {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRepositoryStatusJSONAndCloneRouting(t *testing.T) {

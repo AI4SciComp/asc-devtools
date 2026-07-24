@@ -160,6 +160,7 @@ asc --help
 asc doctor
 ```
 
-Public REST discovery works without `gh` or a token. Private discovery needs a
-documented environment token; SSH or HTTPS cloning separately needs matching
-Git transport credentials.
+Public REST discovery works without `gh` or a token. For private discovery,
+`asc` uses a documented environment token or, when those variables are unset,
+an existing authenticated GitHub CLI login. SSH or HTTPS cloning separately
+needs matching Git transport credentials.

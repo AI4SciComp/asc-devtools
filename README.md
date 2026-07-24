@@ -17,8 +17,9 @@ agents, publish releases, open pull requests, or modify remote Git history.
 - Go 1.25 or newer only when building from source.
 - Bash and `sha256sum` only for the supplied install/uninstall scripts.
 
-The binary uses only the Go standard library. GitHub CLI (`gh`) is not required
-or invoked at runtime.
+The binary uses only the Go standard library. GitHub CLI (`gh`) is optional:
+when no token environment variable is set, REST-backed commands can reuse an
+existing `gh` login for private repository discovery.
 
 ## Install on Ubuntu or WSL2
 
@@ -109,15 +110,18 @@ Environment overrides are `ASC_CONFIG`, `ASC_ORGANIZATION`, `ASC_WORKSPACE`,
 ## Authentication
 
 Public repository discovery requires no token. For private repositories or
-higher API limits, `asc` selects the first nonempty value in this order:
+higher API limits, `asc` selects the first available source in this order:
 
 ```text
 ASC_GITHUB_TOKEN
 GH_TOKEN
 GITHUB_TOKEN
+gh auth token --hostname github.com
 ```
 
-Set one without placing the value in shell history:
+The final source is an optional fallback used only when `gh` is installed and
+already authenticated. To provide a token directly without placing its value
+in shell history:
 
 ```bash
 read -rsp 'GitHub token: ' ASC_GITHUB_TOKEN
@@ -125,8 +129,9 @@ printf '\n'
 export ASC_GITHUB_TOKEN
 ```
 
-The token is sent only as a GitHub REST authorization header and is never
-persisted or printed. REST authentication is separate from Git transport:
+The selected token is kept in memory, sent only as a GitHub REST authorization
+header, and never persisted or printed. REST authentication is separate from
+Git transport:
 
 - SSH clones use the API-provided SSH URL and your SSH key.
 - HTTPS clones use the API-provided HTTPS URL and Git's credential handling.
