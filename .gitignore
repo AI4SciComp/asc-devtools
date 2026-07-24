@@ -1,11 +1,12 @@
+# Go build and test artifacts.
 /asc
 /dist/
 /coverage/
 *.coverprofile
 *.test
 *.out
+
+# Editor and operating-system files.
 .DS_Store
 *.swp
 *~
-
-# Go build and test artifacts.

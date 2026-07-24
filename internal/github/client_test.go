@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -71,6 +72,7 @@ func TestListAPIErrorMessagesDoNotLeakToken(t *testing.T) {
 		{http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0"}, "rate limit"},
 		{http.StatusForbidden, nil, "forbidden"},
 		{http.StatusNotFound, nil, "not found"},
+		{http.StatusInternalServerError, nil, "returned 500"},
 	} {
 		t.Run(fmt.Sprint(test.status, test.want), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
@@ -120,5 +122,29 @@ func TestListTimeout(t *testing.T) {
 	_, err := client.ListOrganizationRepositories(context.Background(), "AI4SciComp")
 	if err == nil || !strings.Contains(err.Error(), "request failed") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestListCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := NewClient("", "dev")
+	client.BaseURL = "https://api.example.invalid"
+	_, err := client.ListOrganizationRepositories(ctx, "AI4SciComp")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context canceled", err)
+	}
+}
+
+func TestFilterManagedRejectsUnsafeAPIData(t *testing.T) {
+	repositories := []Repository{
+		{Name: "asc-safe"},
+		{Name: "asc-../unsafe"},
+		{Name: "asc-space name"},
+		{Name: ".github"},
+	}
+	filtered := FilterManaged(repositories, "asc-", true)
+	if len(filtered) != 2 || filtered[0].Name != ".github" || filtered[1].Name != "asc-safe" {
+		t.Fatalf("FilterManaged() = %+v", filtered)
 	}
 }

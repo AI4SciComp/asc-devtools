@@ -1,134 +1,165 @@
 # Installation
 
-## Release binary
+## Windows 11 and WSL2 Ubuntu
 
-A release binary does not require Go. Install it under the conventional
-`/usr/local` prefix:
+Install WSL2 from an elevated PowerShell prompt if needed:
+
+```powershell
+wsl --install -d Ubuntu
+wsl --update
+wsl --set-default-version 2
+```
+
+Keep the checkout under the WSL filesystem, such as
+`~/AI4SciComp/asc-devtools`, rather than `/mnt/c`.
+
+Inside Ubuntu, install Git and build prerequisites:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential ca-certificates git
+```
+
+CMake and CTest are needed only for their wrapper commands:
+
+```bash
+sudo apt install -y cmake
+```
+
+Install a supported Go 1.25 or 1.26 toolchain from the official Go distribution
+when building from source. A released `asc` binary does not need Go.
+
+## Build from source
+
+From the repository root:
+
+```bash
+CGO_ENABLED=0 go build -buildvcs=false -trimpath \
+  -ldflags "-s -w -X main.version=0.1.0" \
+  -o ./asc ./cmd/asc
+./asc --version
+```
+
+For a development build on the current Go path:
+
+```bash
+go install ./cmd/asc
+```
+
+That command installs to `GOBIN`, or normally `$(go env GOPATH)/bin`. A build
+without linker flags reports version `dev`.
+
+## Managed system installation
 
 ```bash
 sudo ./scripts/install.sh --binary ./asc
 ```
 
-This installs:
+The default `/usr/local` installation owns exactly:
 
-- `/usr/local/bin/asc`
-- `/usr/local/share/bash-completion/completions/asc`
-- `/usr/local/share/asc-devtools/install-manifest`
-
-The manifest records hashes for the managed executable and completion. An
-upgrade refuses to overwrite either file if it was modified or if the manifest
-is missing.
-
-## Self-update
-
-Check without modifying the installation:
-
-```bash
-asc update --check
+```text
+/usr/local/bin/asc
+/usr/local/share/bash-completion/completions/asc
+/usr/local/share/asc-devtools/install-manifest
 ```
 
-Update interactively, or approve non-interactively:
+The manifest records the prefix and SHA-256 hashes. A later install refuses to
+overwrite modified files or an installation without a valid manifest.
 
-```bash
-asc update
-asc update --yes
-sudo asc update --yes  # for a root-owned /usr/local installation
-```
-
-The command infers the prefix from `PREFIX/bin/asc`; pass `--prefix /opt/asc`
-when needed. It downloads only the fixed Go asset for the running OS/architecture
-and `SHA256SUMS` from the latest GitHub release, verifies the hash, safely extracts
-the bundle, and calls the normal installer. It refuses unmanaged or locally
-modified installations and never invokes `sudo`.
-
-Release maintainers create the update asset from an already versioned binary:
-
-```bash
-./scripts/package_update.sh --binary ./dist/asc --output ./dist/release \
-  --os linux --arch amd64
-```
-
-Upload the resulting `asc-devtools-go-OS-ARCH.tar.gz` and `SHA256SUMS` as assets
-on the same release. Build each supported OS/architecture with the release
-version embedded before packaging it.
-
-## Build on Ubuntu/WSL2
-
-Go 1.25 or newer is required to build:
-
-```bash
-CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-  -ldflags "-s -w -X main.version=0.1.0" \
-  -o ./dist/asc ./cmd/asc
-sudo ./scripts/install.sh --binary ./dist/asc
-```
-
-The installer can build from the checkout directly. It searches `PATH` and
-conventional system locations such as `/usr/local/go/bin/go`, which covers a
-standard Go installation even when `sudo` uses a restricted `PATH`:
+The installer can also build from the checkout:
 
 ```bash
 sudo ./scripts/install.sh
-```
-
-For a toolchain installed elsewhere, pass its absolute path explicitly:
-
-```bash
 sudo ./scripts/install.sh --go "$(command -v go)"
 ```
 
-Building before `sudo` is recommended because it uses the developer's selected
-Go toolchain and cache. The scripts never invoke `sudo` themselves.
+The explicit `--go` form is useful when `sudo` has a restricted `PATH`.
 
-Select a different absolute prefix when required:
-
-```bash
-sudo ./scripts/install.sh --binary ./dist/asc --prefix /opt/asc
-sudo ./scripts/uninstall.sh --prefix /opt/asc
-```
-
-Packagers and lifecycle tests can stage the same layout without privilege:
+## User-local installation and PATH
 
 ```bash
-./scripts/install.sh --binary ./dist/asc --destdir "${DESTDIR}"
-./scripts/uninstall.sh --destdir "${DESTDIR}"
+./scripts/install.sh --binary ./asc --prefix "${HOME}/.local"
 ```
 
-`DESTDIR` changes the filesystem staging root, not the recorded `/usr/local`
-prefix. Neither script downloads files, uses telemetry, or edits shell startup
-configuration.
-
-## Uninstall
+If needed, add this once to `~/.bashrc`:
 
 ```bash
-sudo ./scripts/uninstall.sh
+export PATH="${HOME}/.local/bin:${PATH}"
 ```
 
-The uninstaller reads the versioned manifest, verifies both managed file hashes,
-and removes only the three paths listed above. Missing files are tolerated;
-modified files, symlinks, malformed manifests, and unrelated installations are
-refused. It never recursively removes `/usr/local` or any other prefix.
+Then start a new shell or run:
 
-## Completion
+```bash
+source ~/.bashrc
+```
 
-System installation places completion in
-`/usr/local/share/bash-completion/completions/asc` automatically.
-
-For the current shell only:
+Completion is installed to
+`~/.local/share/bash-completion/completions/asc`. If the distribution does not
+load user completion automatically, use:
 
 ```bash
 source <(asc completion bash)
 ```
 
-## Verification
+## Custom prefix and package staging
+
+The prefix must be an absolute path other than `/`:
 
 ```bash
+sudo ./scripts/install.sh --binary ./asc --prefix /opt/asc
+sudo ./scripts/uninstall.sh --prefix /opt/asc
+```
+
+Packagers can stage the same paths:
+
+```bash
+./scripts/install.sh --binary ./asc --destdir "${DESTDIR}"
+./scripts/uninstall.sh --destdir "${DESTDIR}"
+```
+
+`DESTDIR` changes only the staging root; the recorded prefix remains
+`/usr/local` unless `--prefix` is also supplied.
+
+## Upgrade
+
+Build or obtain the replacement binary, verify its provenance, and rerun the
+same installer with the same prefix:
+
+```bash
+sudo ./scripts/install.sh --binary ./asc
+```
+
+The old binary and completion must still match their manifest hashes. There is
+no network self-update command in v0.1.
+
+## Uninstall
+
+For the default prefix:
+
+```bash
+sudo ./scripts/uninstall.sh
+```
+
+For a user-local prefix:
+
+```bash
+./scripts/uninstall.sh --prefix "${HOME}/.local"
+```
+
+The uninstaller verifies hashes and removes only the binary, completion, and
+manifest named above. Missing managed files are tolerated. Modified files,
+symlinks, malformed manifests, and unrelated installations are refused. It
+never recursively deletes a prefix.
+
+## Verify
+
+```bash
+command -v asc
 asc --version
 asc --help
 asc doctor
 ```
 
-API discovery works publicly without GitHub CLI. Configure a token for private
-repositories and separately configure Git SSH or HTTPS credentials for cloning.
-The installer does not vendor CMake modules. After cloning `asc-cmake`, use
-`asc cmake vendor plan REPOSITORY` and review the explicit plan before apply.
+Public REST discovery works without `gh` or a token. Private discovery needs a
+documented environment token; SSH or HTTPS cloning separately needs matching
+Git transport credentials.

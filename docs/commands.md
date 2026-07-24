@@ -1,274 +1,216 @@
 # Command reference
 
-Global options must precede `COMMAND`:
+Global options must precede the command:
 
 ```text
 --config PATH
 --organization NAME
 --workspace PATH
 --no-color
---help
+-h, --help
 --version
 ```
 
-Output requested by a command is written to stdout. Diagnostics and usage errors
-use stderr. The current plain output contains no ANSI color; `NO_COLOR` and
-`--no-color` are accepted for stable compatibility.
+`--config`, `--organization`, and `--workspace` override environment and file
+configuration. `--no-color` and `NO_COLOR` are accepted for compatibility; the
+current output is always free of ANSI color.
 
-Exit codes:
+Requested output goes to stdout. Progress, usage, and diagnostics go to stderr.
 
-```text
-0  success
-1  operational or partial multi-repository failure
-2  invalid command, option, or argument
-```
+## Exit codes
 
-CMake/CTest failures propagate their external exit code when it is between 1 and
-125.
+| Code | Meaning |
+| ---: | --- |
+| `0` | Success |
+| `1` | Operational error or partial multi-repository failure |
+| `2` | Invalid command, option, or argument |
+
+For `configure`, `build`, and `test`, an external CMake/CTest exit code from 1
+through 125 is propagated.
+
+## `asc --help`
+
+Prints top-level help to stdout without loading GitHub data or running an
+external program.
+
+## `asc --version`
+
+Prints `asc VERSION` and any linker-provided commit/build date. It performs no
+network operation.
 
 ## `asc doctor [--json]`
 
-Checks configuration, workspace, Git, GitHub REST reachability, API token
-availability, SSH, CMake, CTest, and whether `asc` is on PATH.
-Checks are `pass`, `warning`, or `failure`. Any failure returns `1`.
+Checks:
+
+- resolved configuration and workspace usability;
+- required Git availability;
+- optional CMake and CTest availability;
+- REST token availability;
+- GitHub organization API access;
+- SSH executable and bounded GitHub authentication probe;
+- whether `asc` is on `PATH`.
+
+Statuses are `pass`, `warning`, and `failure`. A warning does not change the
+exit code; any failure returns `1`.
 
 JSON schema:
 
 ```json
-[{"name":"git","status":"pass","detail":"git version ...","remedy":"optional text"}]
+[
+  {
+    "name": "git",
+    "status": "pass",
+    "detail": "git version 2.34.1",
+    "remedy": "optional text"
+  }
+]
 ```
 
 ## `asc workspace`
 
-Prints only the cleaned absolute workspace. It performs no network operation and
-does not require the workspace to exist.
-
-## `asc workspace init [--dry-run]`
-
-Plans or creates the canonical coordination layout below the configured umbrella
-workspace:
-
-```text
-workspace/{agents,workflows,memory,tools,config,projects,docs}
-```
-
-The umbrella and `workspace` directories are included when absent. Output is one
-exact absolute target per line with `create`/`keep` in dry-run mode and
-`created`/`keep` after a successful apply. Existing files and symlinks are
-errors. If creation fails, the command attempts to remove only empty directories
-created by that invocation.
-
-## `asc workspace validate [--json]`
-
-Checks the same fixed directory set without mutation or network access. Every
-path must be a real directory rather than a symlink. Plain results use
-`pass`/`failure`; `--json` returns:
-
-```json
-[{"path":"/home/user/AI4SciComp","status":"pass"}]
-```
-
-Any failed check returns `1`.
-
-## `asc agent init NAME [--dry-run]`
-
-Plans or creates `workspace/agents/NAME/AGENT.md`. Names must start with a
-lowercase letter, contain only lowercase letters, digits, and hyphens, and be at
-most 63 characters. The command requires an initialized coordination workspace,
-prints the exact definition path, and refuses an existing target. The generated
-definition is explicitly `draft`; this command does not activate or execute an
-agent.
-
-## `asc workflow validate [NAME...] [--json]`
-
-Validates named workflow manifests, or all direct child workflow directories
-when names are omitted. Each manifest is
-`workspace/workflows/NAME/workflow.json` and must follow
-[`workflow-v1.schema.json`](../schemas/workflow-v1.schema.json). Validation is
-read-only and never executes workflow steps.
-
-The validator caps manifests at 1 MiB, rejects symlinks, trailing JSON values,
-unknown fields, unsupported schema versions, duplicate or invalid states,
-missing initial/terminal states, invalid state references, and duplicate
-transitions. Plain output uses `pass`/`failure`; `--json` returns:
-
-```json
-[{"name":"software-development","path":".../workflow.json","status":"pass"}]
-```
-
-One invalid manifest makes the command return `1` after reporting all requested
-workflows. An empty workflows directory is valid and prints `no workflows
-found`.
-
-## `asc update [--check] [--yes] [--prefix PATH]`
-
-Queries `GET /repos/AI4SciComp/asc-devtools/releases/latest` and compares its
-numeric release tag with the running version. `--check` reports only; otherwise
-the command asks for confirmation unless `--yes` is supplied. The install prefix
-is inferred from `PREFIX/bin/asc`, or may be supplied explicitly as an absolute
-non-root path.
-
-The Go implementation downloads
-`asc-devtools-go-OS-ARCH.tar.gz` and `SHA256SUMS`, requires an exact SHA-256
-match, rejects absolute paths, traversal, links, devices, and unexpected archive
-roots, then invokes the bundled installer. The existing installation manifest
-must be present and the installer independently refuses modified managed files.
-The command does not invoke `sudo`; run the command with suitable permissions.
-A missing latest release or required asset is an operational error.
+Prints only the cleaned absolute workspace path. The path need not exist. The
+command does not access the network or run Git.
 
 ## `asc repo list [--json]`
 
-Pages through `GET /orgs/ORGANIZATION/repos?type=all&per_page=100&page=N`, then
-sorts and returns non-archived prefix matches plus optional `.github`.
+Pages through:
 
-JSON is an array with stable API-derived fields:
+```text
+GET /orgs/ORGANIZATION/repos?type=all&per_page=100&page=N
+```
+
+It returns sorted, non-archived repositories matching `repositoryPrefix`, plus
+`.github` when `includeDotGitHub` is true.
+
+Plain output columns are repository, visibility, and default branch. JSON is an
+array in repository-name order:
 
 ```json
-[{"name":"asc-cpp","archived":false,"fork":false,"clone_url":"https://...","ssh_url":"git@...","default_branch":"main","private":false}]
+[
+  {
+    "name": "asc-cpp",
+    "archived": false,
+    "fork": false,
+    "clone_url": "https://github.com/AI4SciComp/asc-cpp.git",
+    "ssh_url": "git@github.com:AI4SciComp/asc-cpp.git",
+    "default_branch": "main",
+    "private": true
+  }
+]
 ```
 
 ## `asc repo clone [REPOSITORY...] [--protocol ssh|https]`
 
-Discovers through the REST API. Explicit names must be returned by the
-organization. SSH uses the API `ssh_url`; HTTPS uses `clone_url`. Git executes:
+Discovers repositories through the REST API, then invokes:
 
 ```text
-git clone -- URL ABSOLUTE_DESTINATION
+git clone -- API_URL ABSOLUTE_DESTINATION
 ```
 
-An expected existing worktree is `already-present`. A symlink, nonrepository, or
-wrong remote is failed and untouched. Processing continues and a deterministic
-summary is printed. Any failure returns `1`.
+Without names, it processes all eligible API repositories. Explicit names must
+be returned by the API. `--protocol` overrides the configured default.
+
+An existing destination is accepted only when it is a nonsymlink Git worktree
+whose configured remote matches the API repository. Other existing paths are
+reported as failures and left untouched. Processing continues after independent
+failures.
+
+Outcomes are `cloned`, `already-present`, and `failed`. Any failure returns `1`.
 
 ## `asc repo status [REPOSITORY...] [--json]`
 
-Inspects named repositories or all managed direct children with
-`git status --porcelain=v2 --branch`. Plain output includes repository, branch,
-state, upstream, and ahead/behind. JSON schema:
+With names, inspects those direct workspace children. Without names, discovers
+all managed nonsymlink Git worktrees immediately below the workspace. It runs:
 
-```json
-[{"name":"asc-cpp","branch":"main","detached":false,"upstream":"origin/main","ahead":0,"behind":0,"clean":true,"changes":0,"error":"optional"}]
+```text
+git -C PATH status --porcelain=v2 --branch
 ```
 
-Failures do not stop later repositories and make the command return `1`.
+No network operation occurs. JSON is sorted by requested/discovered order:
+
+```json
+[
+  {
+    "name": "asc-cpp",
+    "branch": "main",
+    "detached": false,
+    "upstream": "origin/main",
+    "ahead": 0,
+    "behind": 0,
+    "clean": true,
+    "changes": 0,
+    "error": "optional error"
+  }
+]
+```
+
+Requested repositories retain the requested order; automatic discovery is
+name-sorted. An inspection error is reported in the item and makes the command
+return `1`.
 
 ## `asc repo sync [REPOSITORY...] [--dry-run]`
 
-Sync is download-only; it never uploads local commits or files.
-Validates a Git worktree, clean status including untracked files, configured
-remote, attached branch, and upstream on that remote. Dry-run prints safely
-quoted planned commands but does not fetch or merge. Real execution uses:
+Sync is download-only. For each target, it verifies:
+
+1. the direct child is a Git worktree rather than a symlink;
+2. tracked and untracked state is clean;
+3. the configured remote exists;
+4. HEAD is attached to a branch;
+5. the branch has an upstream on the configured remote.
+
+Dry-run prints the safely quoted plan and executes neither fetch nor merge:
 
 ```text
 git -C PATH fetch -- REMOTE
 git -C PATH merge --ff-only UPSTREAM
 ```
 
-Outcomes are `planned`, `updated`, `unchanged`, `skipped`, or `failed`. Skips and
-failures return `1` after all independent repositories are processed.
+Real sync runs those exact operations. It never uploads local commits. A merge
+that cannot fast-forward is refused without changing history.
 
-## `asc repo save REPOSITORY [--message TEXT] [--dry-run] [--yes]`
+Outcomes are `planned`, `updated`, `unchanged`, `skipped`, and `failed`.
+`skipped` or `failed` makes the overall command return `1` after all independent
+repositories are processed.
 
-Save is the explicit upload workflow inspired by the `git-save` Make target. It
-operates on exactly one managed direct-child repository. When `--message` is
-omitted, it uses `Updated at YYYY-MM-DD HH:MM:SS` in local time; an explicit
-one-line message overrides that default. `--dry-run` prints the exact
-fetch/add/commit/push plan without network or filesystem mutation. Without
-`--yes`, the real command displays that plan and asks for confirmation.
+## `asc configure REPOSITORY --preset PRESET`
 
-Before staging anything, save rechecks the reviewed status, fetches the configured
-remote, and compares `HEAD` with the tracked upstream. It refuses detached HEAD,
-missing or wrong-remote upstreams, unresolved conflicts, remote-ahead state, and
-divergence. When safe, it executes:
-
-```text
-git -C PATH add --all --
-git -C PATH commit -m MESSAGE       # only when staged changes exist
-git -C PATH push -- REMOTE HEAD:refs/heads/UPSTREAM_BRANCH
-```
-
-A clean branch with existing local commits is pushed without an empty commit. If
-nothing needs committing or pushing, the outcome is `unchanged`. If push fails,
-the new local commit is retained and reported. Git credentials remain Git's
-responsibility; asc neither reads nor stores them.
-
-## CMake commands
-
-```text
-asc cmake configure REPOSITORY --preset PRESET
-asc cmake build REPOSITORY --preset PRESET [--target TARGET]...
-asc cmake test REPOSITORY --preset PRESET [--label LABEL] [--output-on-failure]
-asc cmake workflow REPOSITORY \
-  --configure-preset PRESET --build-preset PRESET --test-preset PRESET
-asc cmake presets REPOSITORY [--json]
-```
-
-The original `asc configure`, `asc build`, and `asc test` forms remain aliases
-with their v0.1 arguments. A preset is always explicit; asc never guesses or
-interprets preset inheritance. The repository must be a managed direct-child Git
-worktree and have `CMakePresets.json` or local `CMakeUserPresets.json`.
-Configure and workflow also require `CMakeLists.txt`.
-
-Preset membership is delegated to `cmake --list-presets`,
-`cmake --list-presets=build`, and `ctest --list-presets`. Execution uses exact
-argument arrays from the repository root:
+Validates a direct-child Git worktree, a preset file, and `CMakeLists.txt`.
+It confirms the configure preset with `cmake --list-presets`, then runs:
 
 ```text
 cmake --preset PRESET
-cmake --build --preset PRESET --target TARGET...
-ctest --preset PRESET --output-on-failure -L LABEL
 ```
 
-Workflow prints each stage and safely rendered command to stderr, stops on the
-first failure, and propagates the external exit status. It never performs Git
-sync or vendoring. Preset JSON has this stable shape:
+The process working directory is the repository root.
 
-```json
-{"repository":"asc-cpp","configure":["dev"],"build":["dev"],"test":["dev"]}
-```
+## `asc build REPOSITORY --preset PRESET`
 
-## Local asc-cmake vendoring
+Confirms the build preset with `cmake --list-presets=build`, then runs:
 
 ```text
-asc cmake vendor status REPOSITORY [--json]
-asc cmake vendor plan REPOSITORY [--source PATH] [--ref REF] [--json]
-asc cmake vendor apply REPOSITORY [--source PATH] [--ref REF] [--yes]
+cmake --build --preset PRESET
 ```
 
-The default source is `<workspace>/asc-cmake`; `--source` deliberately permits
-another local checkout. There is no network download. The source must be a Git
-worktree with a matching origin when one is configured. `--ref` must resolve to
-the checked-out commit and never causes checkout. Apply refuses a dirty source.
+## `asc test REPOSITORY --preset PRESET`
 
-The default target is `<consumer>/cmake/asc`. A strict `distribution.json` may
-list exact relative files; otherwise the allowlist is `LICENSE` and nonsymlink
-`modules/**/*.cmake`. The deterministic schema-v1 manifest records
-`AI4SciComp/asc-cmake`, version, commit, sorted file paths, and SHA-256 hashes. A
-timestamp is omitted. Status values are `not-vendored`, `current`,
-`source-newer`, `locally-modified`, `manifest-invalid`, and
-`source-unavailable`. Extra unmanaged files are reported without deletion.
+Confirms the test preset with `ctest --list-presets`, then runs:
 
-Plan is read-only and emits sorted `add`, `replace`, `preserve`, and `remove`
-actions. It refuses locally modified managed files. Apply recomputes the exact
-plan, prompts unless `--yes` is supplied, stages replacements, writes the
-manifest last, preserves unmanaged files, and rolls back its own replacements
-on failure. It never runs Git add or commit. Review the result with:
-
-```bash
-git diff -- cmake/asc
+```text
+ctest --preset PRESET
 ```
 
-Configuration can relocate the managed directory and default source name:
-
-```json
-{"cmake":{"vendorDirectory":"cmake/asc","sourceRepository":"asc-cmake"}}
-```
-
-Each consumer continues to own CMake policy and `CMakePresets.json`. Vendoring
-supports offline reproducible builds; configure never changes vendored files.
+`asc` does not guess a preset, interpret inheritance, sync repositories, or
+change build policy.
 
 ## `asc completion bash`
 
-Prints static Bash completion for commands, flags, common presets, and local
-repository names. It calls only local `asc workspace`; ordinary completion never
-uses the network.
+Prints the embedded Bash completion definition. Completion suggests canonical
+commands, common presets, and managed direct-child repository names. It calls
+only local `asc workspace` while completing repositories and never discovers
+them through the network.
+
+Load it for the current shell:
+
+```bash
+source <(asc completion bash)
+```

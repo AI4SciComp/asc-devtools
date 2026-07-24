@@ -48,14 +48,14 @@ func TestCloneUsesAPIURLAndRefusesConflicts(t *testing.T) {
 		return process.Result{}, errors.New("unexpected command")
 	}}
 	repositories := []github.Repository{
-		{Name: "asc-one", SSHURL: "git@example:org/asc-one.git", CloneURL: "https://example/org/asc-one.git"},
-		{Name: "asc-data", SSHURL: "git@example:org/asc-data.git"},
+		{Name: "asc-one", SSHURL: "git@github.com:AI4SciComp/asc-one.git", CloneURL: "https://github.com/AI4SciComp/asc-one.git"},
+		{Name: "asc-data", SSHURL: "git@github.com:AI4SciComp/asc-data.git"},
 	}
 	operations := (Manager{Runner: runner, Config: testConfig(workspace)}).Clone(context.Background(), repositories, nil, "ssh")
 	if len(operations) != 2 || operations[0].Outcome != "failed" || operations[1].Outcome != "cloned" {
 		t.Fatalf("Clone() = %+v", operations)
 	}
-	want := []string{"clone", "--", "git@example:org/asc-one.git", filepath.Join(workspace, "asc-one")}
+	want := []string{"clone", "--", "git@github.com:AI4SciComp/asc-one.git", filepath.Join(workspace, "asc-one")}
 	if len(runner.calls) != 1 || !reflect.DeepEqual(runner.calls[0].Args, want) || !runner.calls[0].Stream {
 		t.Fatalf("clone call = %+v", runner.calls)
 	}
@@ -71,7 +71,7 @@ func TestCloneExistingRepositoryRequiresExpectedRemote(t *testing.T) {
 	if err := os.Mkdir(destination, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	repository := github.Repository{Name: "asc-one", SSHURL: "git@example:org/asc-one.git"}
+	repository := github.Repository{Name: "asc-one", SSHURL: "git@github.com:AI4SciComp/asc-one.git"}
 	remote := repository.SSHURL
 	runner := &functionRunner{run: func(command process.Command) (process.Result, error) {
 		joined := strings.Join(command.Args, " ")
@@ -88,10 +88,51 @@ func TestCloneExistingRepositoryRequiresExpectedRemote(t *testing.T) {
 	if operations[0].Outcome != "already-present" {
 		t.Fatalf("Clone() = %+v", operations)
 	}
-	remote = "git@example:other/repository.git"
+	remote = "git@github.com:Other/repository.git"
 	operations = manager.Clone(context.Background(), []github.Repository{repository}, nil, "ssh")
 	if operations[0].Outcome != "failed" || !strings.Contains(operations[0].Detail, "does not match") {
 		t.Fatalf("Clone() mismatch = %+v", operations)
+	}
+}
+
+func TestValidateCloneURL(t *testing.T) {
+	tests := []struct {
+		protocol string
+		url      string
+		wantErr  bool
+	}{
+		{"ssh", "git@github.com:AI4SciComp/asc-one.git", false},
+		{"https", "https://github.com/AI4SciComp/asc-one.git", false},
+		{"ssh", "ext::sh -c unsafe", true},
+		{"https", "file:///tmp/repository", true},
+		{"ftp", "https://github.com/AI4SciComp/asc-one.git", true},
+	}
+	for _, test := range tests {
+		err := validateCloneURL(test.url, test.protocol, "AI4SciComp", "asc-one")
+		if (err != nil) != test.wantErr {
+			t.Errorf("validateCloneURL(%q, %q) error = %v", test.url, test.protocol, err)
+		}
+	}
+}
+
+func TestCloneRefusesDestinationSymlink(t *testing.T) {
+	workspace := t.TempDir()
+	if err := os.Symlink(t.TempDir(), filepath.Join(workspace, "asc-one")); err != nil {
+		t.Fatal(err)
+	}
+	runner := &functionRunner{run: func(process.Command) (process.Result, error) {
+		return process.Result{}, errors.New("runner must not be called")
+	}}
+	repositories := []github.Repository{{
+		Name:   "asc-one",
+		SSHURL: "git@github.com:AI4SciComp/asc-one.git",
+	}}
+	operations := (Manager{Runner: runner, Config: testConfig(workspace)}).Clone(context.Background(), repositories, nil, "ssh")
+	if len(operations) != 1 || operations[0].Outcome != "failed" || !strings.Contains(operations[0].Detail, "symbolic link") {
+		t.Fatalf("Clone() = %+v", operations)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("runner calls = %+v", runner.calls)
 	}
 }
 
@@ -120,6 +161,9 @@ func TestParseStatus(t *testing.T) {
 			}
 		})
 	}
+	if _, err := ParseStatus("asc-one", "# branch.ab -1 +2\n"); err == nil {
+		t.Fatal("ParseStatus accepted malformed ahead/behind signs")
+	}
 }
 
 func TestSyncDryRunAndUnsafeStates(t *testing.T) {
@@ -128,11 +172,13 @@ func TestSyncDryRunAndUnsafeStates(t *testing.T) {
 		status        string
 		branchError   bool
 		upstreamError bool
+		upstream      string
 		want          string
 	}{
 		{name: "dirty", status: "?? file\n", want: "skipped"},
 		{name: "detached", branchError: true, want: "skipped"},
 		{name: "no upstream", upstreamError: true, want: "skipped"},
+		{name: "wrong remote", upstream: "fork/main", want: "skipped"},
 		{name: "clean dry run", want: "planned"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -159,7 +205,11 @@ func TestSyncDryRunAndUnsafeStates(t *testing.T) {
 					if test.upstreamError {
 						return process.Result{}, errors.New("no upstream")
 					}
-					return process.Result{Stdout: "origin/main\n"}, nil
+					upstream := test.upstream
+					if upstream == "" {
+						upstream = "origin/main"
+					}
+					return process.Result{Stdout: upstream + "\n"}, nil
 				default:
 					return process.Result{}, errors.New("unexpected command: " + joined)
 				}
@@ -223,64 +273,6 @@ func TestSyncRealFastForwardAndDivergence(t *testing.T) {
 	}
 }
 
-func TestSaveCommitsPushesAndRefusesRemoteAhead(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not installed")
-	}
-	directory := t.TempDir()
-	bare := filepath.Join(directory, "remote.git")
-	seed := filepath.Join(directory, "seed")
-	workspace := filepath.Join(directory, "workspace")
-	runGit(t, directory, "init", "-q", "--bare", bare)
-	initRepository(t, seed)
-	runGit(t, seed, "remote", "add", "origin", bare)
-	runGit(t, seed, "push", "-qu", "origin", "HEAD")
-	if err := os.Mkdir(workspace, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	clone := filepath.Join(workspace, "asc-one")
-	runGit(t, directory, "clone", "-q", bare, clone)
-	runGit(t, clone, "config", "user.name", "Asc Tests")
-	runGit(t, clone, "config", "user.email", "asc-tests@example.invalid")
-	if err := os.WriteFile(filepath.Join(clone, "saved.txt"), []byte("saved\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	manager := Manager{Runner: process.OSRunner{}, Config: testConfig(workspace)}
-	plan, err := manager.PlanSave(context.Background(), "asc-one", "Save local work")
-	if err != nil || plan.Changes != 1 || len(plan.Operation.Plan) != 4 {
-		t.Fatalf("PlanSave() = %+v, %v", plan, err)
-	}
-	operation := manager.ApplySave(context.Background(), plan)
-	if operation.Outcome != "saved" || !strings.Contains(operation.Detail, "committed and pushed") {
-		t.Fatalf("ApplySave() = %+v", operation)
-	}
-	if subject := strings.TrimSpace(gitOutput(t, bare, "log", "-1", "--format=%s")); subject != "Save local work" {
-		t.Fatalf("remote subject = %q", subject)
-	}
-
-	runGit(t, seed, "pull", "-q", "--ff-only")
-	if err := os.WriteFile(filepath.Join(seed, "remote.txt"), []byte("remote\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	runGit(t, seed, "add", "remote.txt")
-	runGit(t, seed, "commit", "-qm", "remote update")
-	runGit(t, seed, "push", "-q")
-	if err := os.WriteFile(filepath.Join(clone, "not-saved.txt"), []byte("local\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	plan, err = manager.PlanSave(context.Background(), "asc-one", "Must not commit")
-	if err != nil {
-		t.Fatal(err)
-	}
-	operation = manager.ApplySave(context.Background(), plan)
-	if operation.Outcome != "skipped" || !strings.Contains(operation.Detail, "reconcile them manually") {
-		t.Fatalf("remote-ahead ApplySave() = %+v", operation)
-	}
-	if subject := strings.TrimSpace(gitOutput(t, clone, "log", "-1", "--format=%s")); subject == "Must not commit" {
-		t.Fatal("save committed before checking remote state")
-	}
-}
-
 func initRepository(t *testing.T, path string) {
 	t.Helper()
 	if err := os.Mkdir(path, 0o755); err != nil {
@@ -303,15 +295,4 @@ func runGit(t *testing.T, directory string, arguments ...string) {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", arguments, err, output)
 	}
-}
-
-func gitOutput(t *testing.T, directory string, arguments ...string) string {
-	t.Helper()
-	command := exec.Command("git", arguments...)
-	command.Dir = directory
-	output, err := command.Output()
-	if err != nil {
-		t.Fatalf("git %v: %v", arguments, err)
-	}
-	return string(output)
 }

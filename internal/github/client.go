@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -18,7 +19,10 @@ const (
 	defaultBaseURL  = "https://api.github.com"
 	maxResponseSize = 4 << 20
 	maxErrorSize    = 8 << 10
+	maxPages        = 1000
 )
+
+var repositoryNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 // Repository is the subset of GitHub repository metadata used by asc.
 type Repository struct {
@@ -91,6 +95,9 @@ func (c *Client) ListOrganizationRepositories(ctx context.Context, organization 
 		if len(pageRepositories) == 0 {
 			break
 		}
+		if page == maxPages {
+			return nil, errors.New("GitHub API pagination exceeded 1000 pages")
+		}
 	}
 	return repositories, nil
 }
@@ -136,7 +143,8 @@ func apiError(response *http.Response) error {
 func FilterManaged(repositories []Repository, prefix string, includeDotGitHub bool) []Repository {
 	filtered := make([]Repository, 0, len(repositories))
 	for _, repository := range repositories {
-		if repository.Archived {
+		if repository.Archived || repository.Name == "" || repository.Name == "." || repository.Name == ".." ||
+			strings.HasPrefix(repository.Name, "-") || !repositoryNamePattern.MatchString(repository.Name) {
 			continue
 		}
 		if strings.HasPrefix(repository.Name, prefix) || (includeDotGitHub && repository.Name == ".github") {

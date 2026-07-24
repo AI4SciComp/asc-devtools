@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/AI4SciComp/asc-devtools/internal/config"
 	"github.com/AI4SciComp/asc-devtools/internal/process"
@@ -24,7 +23,9 @@ func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) 
 }
 
 type appRunner struct {
-	calls []process.Command
+	calls    []process.Command
+	failName string
+	failCode int
 }
 
 func (r *appRunner) Run(_ context.Context, command process.Command) (process.Result, error) {
@@ -35,8 +36,20 @@ func (r *appRunner) Run(_ context.Context, command process.Command) (process.Res
 		return process.Result{Stdout: "true\n"}, nil
 	case strings.Contains(joined, "status --porcelain=v2"):
 		return process.Result{Stdout: "# branch.head main\n# branch.upstream origin/main\n# branch.ab +1 -2\n"}, nil
+	case strings.Contains(joined, "status --porcelain"):
+		return process.Result{}, nil
+	case strings.Contains(joined, "remote get-url"):
+		return process.Result{Stdout: "git@github.com:AI4SciComp/asc-one.git\n"}, nil
+	case strings.Contains(joined, "symbolic-ref"):
+		return process.Result{Stdout: "main\n"}, nil
+	case strings.Contains(joined, "@{upstream}"):
+		return process.Result{Stdout: "origin/main\n"}, nil
 	case command.Name == "git" && len(command.Args) > 0 && command.Args[0] == "clone":
 		return process.Result{}, nil
+	case strings.Contains(joined, "--list-presets"):
+		return process.Result{Stdout: "  \"dev\"\n"}, nil
+	case command.Name == r.failName && command.Stream:
+		return process.Result{ExitCode: r.failCode}, &process.CommandError{Command: process.Describe(command), ExitCode: r.failCode}
 	case command.Name == "ssh":
 		return process.Result{Stderr: "successfully authenticated"}, nil
 	case command.Name == "git" || command.Name == "cmake" || command.Name == "ctest":
@@ -93,7 +106,7 @@ func apiClient(body string, status int) *http.Client {
 
 func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 	code, stdout, stderr := runApp(t, []string{"--help"}, nil, nil, nil)
-	if code != ExitSuccess || !strings.Contains(stdout, "repo clone") || stderr != "" {
+	if code != ExitSuccess || !strings.Contains(stdout, "repo clone") || strings.Contains(stdout, "repo save") || strings.Contains(stdout, "\n  update ") || stderr != "" {
 		t.Fatalf("help = %d, %q, %q", code, stdout, stderr)
 	}
 	code, stdout, stderr = runApp(t, []string{"--version"}, nil, nil, nil)
@@ -108,33 +121,18 @@ func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 	if code != ExitSuccess {
 		t.Fatalf("repo list help code = %d", code)
 	}
-	code, stdout, stderr = runApp(t, []string{"cmake", "--help"}, nil, nil, nil)
-	if code != ExitSuccess || !strings.Contains(stdout, "vendor {status|plan|apply}") || stderr != "" {
-		t.Fatalf("cmake help = %d, %q, %q", code, stdout, stderr)
-	}
-	code, _, stderr = runApp(t, []string{"cmake", "workflow", "asc-cpp", "--configure-preset", "dev"}, nil, nil, nil)
-	if code != ExitUsage || !strings.Contains(stderr, "all three workflow presets") {
-		t.Fatalf("workflow validation = %d, %q", code, stderr)
-	}
-	code, stdout, stderr = runApp(t, []string{"update", "--help"}, nil, nil, nil)
-	if code != ExitSuccess || !strings.Contains(stdout, "--check") || stderr != "" {
-		t.Fatalf("update help = %d, %q, %q", code, stdout, stderr)
-	}
-	code, stdout, stderr = runApp(t, []string{"update", "--check"}, nil, nil, apiClient("not found", http.StatusNotFound))
-	if code != ExitFailure || stdout != "" || !strings.Contains(stderr, "no published asc release") {
-		t.Fatalf("update without release = %d, %q, %q", code, stdout, stderr)
-	}
-	code, stdout, stderr = runApp(t, []string{"repo", "save", "--help"}, nil, nil, nil)
-	if code != ExitSuccess || !strings.Contains(stdout, "--message") || stderr != "" {
-		t.Fatalf("repo save help = %d, %q, %q", code, stdout, stderr)
-	}
-	if repository, message, dryRun, yes, err := parseRepoSave([]string{"asc-one", "--message", "Save work", "--dry-run", "--yes"}); err != nil || repository != "asc-one" || message != "Save work" || !dryRun || !yes {
-		t.Fatalf("parseRepoSave() = %q, %q, %v, %v, %v", repository, message, dryRun, yes, err)
-	}
-	if repository, message, dryRun, yes, err := parseRepoSave([]string{"asc-one", "--dry-run"}); err != nil || repository != "asc-one" || !dryRun || yes {
-		t.Fatalf("parseRepoSave(default) = %q, %q, %v, %v, %v", repository, message, dryRun, yes, err)
-	} else if _, err := time.Parse("Updated at 2006-01-02 15:04:05", message); err != nil {
-		t.Fatalf("default save message = %q: %v", message, err)
+	for _, arguments := range [][]string{
+		{"agent"},
+		{"workflow"},
+		{"cmake"},
+		{"update"},
+		{"repo", "save"},
+		{"workspace", "init"},
+	} {
+		code, stdout, stderr = runApp(t, arguments, nil, nil, nil)
+		if code != ExitUsage || stdout != "" || !strings.Contains(stderr, "asc: error:") {
+			t.Fatalf("excluded command %v = %d, %q, %q", arguments, code, stdout, stderr)
+		}
 	}
 }
 
@@ -143,58 +141,6 @@ func TestWorkspaceHasNoNetworkOrDiagnostics(t *testing.T) {
 	code, stdout, stderr := runApp(t, []string{"workspace"}, map[string]string{"ASC_WORKSPACE": workspace}, nil, nil)
 	if code != ExitSuccess || strings.TrimSpace(stdout) != workspace || stderr != "" {
 		t.Fatalf("workspace = %d, %q, %q", code, stdout, stderr)
-	}
-}
-
-func TestCoordinationCommands(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "AI4SciComp")
-	environment := map[string]string{"ASC_WORKSPACE": root}
-
-	code, stdout, stderr := runApp(t, []string{"workspace", "init", "--dry-run"}, environment, nil, nil)
-	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, "create\t"+root) {
-		t.Fatalf("workspace init dry-run = %d, %q, %q", code, stdout, stderr)
-	}
-	if _, err := os.Stat(root); !os.IsNotExist(err) {
-		t.Fatalf("workspace init --dry-run changed the filesystem: %v", err)
-	}
-
-	code, stdout, stderr = runApp(t, []string{"workspace", "init"}, environment, nil, nil)
-	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, "created\t"+root) {
-		t.Fatalf("workspace init = %d, %q, %q", code, stdout, stderr)
-	}
-	code, stdout, stderr = runApp(t, []string{"workspace", "validate", "--json"}, environment, nil, nil)
-	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, `"status": "pass"`) {
-		t.Fatalf("workspace validate = %d, %q, %q", code, stdout, stderr)
-	}
-
-	code, stdout, stderr = runApp(t, []string{"agent", "init", "reviewer", "--dry-run"}, environment, nil, nil)
-	definition := filepath.Join(root, "workspace", "agents", "reviewer", "AGENT.md")
-	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, definition) {
-		t.Fatalf("agent init dry-run = %d, %q, %q", code, stdout, stderr)
-	}
-	if _, err := os.Stat(definition); !os.IsNotExist(err) {
-		t.Fatalf("agent init --dry-run changed the filesystem: %v", err)
-	}
-	code, stdout, stderr = runApp(t, []string{"agent", "init", "reviewer"}, environment, nil, nil)
-	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, "created\t"+definition) {
-		t.Fatalf("agent init = %d, %q, %q", code, stdout, stderr)
-	}
-	code, _, stderr = runApp(t, []string{"agent", "init", "reviewer"}, environment, nil, nil)
-	if code != ExitFailure || !strings.Contains(stderr, "agent already exists") {
-		t.Fatalf("duplicate agent init = %d, %q", code, stderr)
-	}
-
-	workflowDirectory := filepath.Join(root, "workspace", "workflows", "software-development")
-	if err := os.MkdirAll(workflowDirectory, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	manifest := `{"schemaVersion":1,"name":"software-development","states":["proposed","done"],"initialState":"proposed","terminalStates":["done"],"transitions":[{"from":"proposed","to":"done"}]}`
-	if err := os.WriteFile(filepath.Join(workflowDirectory, "workflow.json"), []byte(manifest), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	code, stdout, stderr = runApp(t, []string{"workflow", "validate", "software-development", "--json"}, environment, nil, nil)
-	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, `"status": "pass"`) {
-		t.Fatalf("workflow validate = %d, %q, %q", code, stdout, stderr)
 	}
 }
 
@@ -223,19 +169,59 @@ func TestRepositoryStatusJSONAndCloneRouting(t *testing.T) {
 	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, `"ahead": 1`) || !strings.Contains(stdout, `"behind": 2`) {
 		t.Fatalf("status = %d, %q, %q", code, stdout, stderr)
 	}
-	body := `[{"name":"asc-two","archived":false,"ssh_url":"ssh-url","clone_url":"https-url"}]`
+	body := `[{"name":"asc-two","archived":false,"ssh_url":"git@github.com:AI4SciComp/asc-two.git","clone_url":"https://github.com/AI4SciComp/asc-two.git"}]`
 	code, stdout, stderr = runApp(t, []string{"repo", "clone", "asc-two", "--protocol", "https"}, map[string]string{"ASC_WORKSPACE": workspace}, runner, apiClient(body, http.StatusOK))
 	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, "cloned") {
 		t.Fatalf("clone = %d, %q, %q", code, stdout, stderr)
 	}
 	found := false
 	for _, call := range runner.calls {
-		if len(call.Args) >= 3 && call.Args[0] == "clone" && call.Args[2] == "https-url" {
+		if len(call.Args) >= 3 && call.Args[0] == "clone" && call.Args[2] == "https://github.com/AI4SciComp/asc-two.git" {
 			found = true
 		}
 	}
 	if !found {
 		t.Fatalf("clone command not routed: %+v", runner.calls)
+	}
+}
+
+func TestRepositorySyncDryRunAndCMakeExitPropagation(t *testing.T) {
+	workspace := t.TempDir()
+	repository := filepath.Join(workspace, "asc-one")
+	if err := os.Mkdir(repository, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &appRunner{}
+	code, stdout, stderr := runApp(t, []string{"repo", "sync", "asc-one", "--dry-run"}, map[string]string{"ASC_WORKSPACE": workspace}, runner, nil)
+	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, "planned") {
+		t.Fatalf("sync dry run = %d, %q, %q", code, stdout, stderr)
+	}
+	for _, call := range runner.calls {
+		if len(call.Args) > 2 && (call.Args[2] == "fetch" || call.Args[2] == "merge") {
+			t.Fatalf("dry run executed mutation: %+v", call)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(repository, "CMakePresets.json"), []byte(`{"version":6}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repository, "CMakeLists.txt"), []byte("cmake_minimum_required(VERSION 3.25)\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runner = &appRunner{}
+	code, stdout, stderr = runApp(t, []string{"configure", "asc-one", "--preset", "dev"}, map[string]string{"ASC_WORKSPACE": workspace}, runner, nil)
+	if code != ExitSuccess || stdout != "" || stderr != "" {
+		t.Fatalf("configure = %d, %q, %q", code, stdout, stderr)
+	}
+	last := runner.calls[len(runner.calls)-1]
+	if last.Name != "cmake" || strings.Join(last.Args, " ") != "--preset dev" || last.Dir != repository || !last.Stream {
+		t.Fatalf("configure command = %+v", last)
+	}
+
+	runner = &appRunner{failName: "cmake", failCode: 7}
+	code, stdout, stderr = runApp(t, []string{"build", "asc-one", "--preset", "dev"}, map[string]string{"ASC_WORKSPACE": workspace}, runner, nil)
+	if code != 7 || stdout != "" || !strings.Contains(stderr, "command failed (7)") {
+		t.Fatalf("build failure = %d, %q, %q", code, stdout, stderr)
 	}
 }
 

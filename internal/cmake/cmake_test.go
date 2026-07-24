@@ -1,7 +1,6 @@
 package cmake
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -98,47 +97,5 @@ func TestRunValidationAndFailure(t *testing.T) {
 	}
 	if !errors.As(err, new(*process.CommandError)) {
 		t.Fatalf("error does not wrap CommandError: %v", err)
-	}
-}
-
-func TestGroupedOptionsWorkflowAndPresetListing(t *testing.T) {
-	manager, runner, _ := setupManager(t)
-	if err := manager.RunOperation(context.Background(), "build", "asc-cpp", Options{Preset: "release.v2", Targets: []string{"solver", "path with spaces"}}); err == nil {
-		// The fixture intentionally lists only dev/release; verify punctuation is
-		// accepted before preset membership is checked.
-	} else if !strings.Contains(err.Error(), "not found") {
-		t.Fatalf("punctuated preset validation: %v", err)
-	}
-	if err := manager.RunOperation(context.Background(), "test", "asc-cpp", Options{Preset: "dev", Label: "unit-fast", OutputOnFailure: true}); err != nil {
-		t.Fatal(err)
-	}
-	actual := runner.calls[len(runner.calls)-1]
-	if !reflect.DeepEqual(actual.Args, []string{"--preset", "dev", "--output-on-failure", "-L", "unit-fast"}) {
-		t.Fatalf("test args = %v", actual.Args)
-	}
-
-	var report bytes.Buffer
-	manager.Reporter = &report
-	if err := manager.Workflow(context.Background(), "asc-cpp", WorkflowOptions{ConfigurePreset: "dev", BuildPreset: "release", TestPreset: "dev"}); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(report.String(), "configure: cmake --preset dev") || !strings.Contains(report.String(), "test: ctest --preset dev") {
-		t.Fatalf("workflow report = %q", report.String())
-	}
-	presets, err := manager.ListPresets(context.Background(), "asc-cpp")
-	if err != nil || !reflect.DeepEqual(presets.Configure, []string{"dev", "release"}) {
-		t.Fatalf("ListPresets() = %+v, %v", presets, err)
-	}
-}
-
-func TestWorkflowStopsAfterFailure(t *testing.T) {
-	manager, runner, _ := setupManager(t)
-	runner.actualFail = &process.CommandError{ExitCode: 9, Command: "cmake"}
-	err := manager.Workflow(context.Background(), "asc-cpp", WorkflowOptions{ConfigurePreset: "dev", BuildPreset: "release", TestPreset: "dev"})
-	if err == nil || process.ExitCode(err, 1) != 9 {
-		t.Fatalf("Workflow error = %v", err)
-	}
-	if len(runner.calls) != 4 { // Initial validation, stage validation, preset listing, configure.
-		t.Fatalf("workflow continued after failure: %d calls", len(runner.calls))
 	}
 }

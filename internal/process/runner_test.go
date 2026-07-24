@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestOSRunnerCaptureAndFailure(t *testing.T) {
@@ -37,11 +36,11 @@ func TestOSRunnerCancellation(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix command fixture")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 	_, err := (OSRunner{}).Run(ctx, Command{Name: "sleep", Args: []string{"5"}})
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("error = %v, want deadline exceeded", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context canceled", err)
 	}
 }
 

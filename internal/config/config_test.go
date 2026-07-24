@@ -32,9 +32,6 @@ func TestLoadDefaults(t *testing.T) {
 	if config.Organization != "AI4SciComp" || config.CloneProtocol != "ssh" || !config.IncludeDotGitHub {
 		t.Fatalf("unexpected defaults: %+v", config)
 	}
-	if config.CMake.VendorDirectory != "cmake/asc" || config.CMake.SourceRepository != "asc-cmake" {
-		t.Fatalf("unexpected CMake defaults: %+v", config.CMake)
-	}
 	home := filepath.Dir(filepath.Dir(filepath.Dir(config.ConfigPath)))
 	if config.Workspace != filepath.Join(home, "AI4SciComp") {
 		t.Fatalf("unexpected workspace: %s", config.Workspace)
@@ -65,7 +62,12 @@ func TestLoadPrecedence(t *testing.T) {
 }
 
 func TestLoadRejectsMalformedAndUnknownJSON(t *testing.T) {
-	for _, content := range []string{`{"organization":`, `{"unknown":true}`} {
+	for _, content := range []string{
+		`{"organization":`,
+		`{"unknown":true}`,
+		`{"organization":"AI4SciComp"} {"workspace":"/tmp/other"}`,
+		`{"cmake":{"vendorDirectory":"cmake/asc"}}`,
+	} {
 		t.Run(content, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.json")
 			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
@@ -106,32 +108,6 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		loader := testLoader(t, environment)
 		if _, err := loader.Load(Overrides{}); err == nil {
 			t.Fatalf("Load() succeeded for invalid environment: %v", environment)
-		}
-	}
-}
-
-func TestLoadCMakeVendorConfiguration(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"cmake":{"vendorDirectory":"vendor/asc","sourceRepository":"asc-cmake-local"}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	loader := testLoader(t, map[string]string{"ASC_CONFIG": path})
-	loaded, err := loader.Load(Overrides{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded.CMake.VendorDirectory != "vendor/asc" || loaded.CMake.SourceRepository != "asc-cmake-local" {
-		t.Fatalf("CMake config = %+v", loaded.CMake)
-	}
-	for _, content := range []string{
-		`{"cmake":{"vendorDirectory":"../escape"}}`,
-		`{"cmake":{"unknown":true}}`,
-	} {
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := loader.Load(Overrides{}); err == nil {
-			t.Fatalf("Load accepted %s", content)
 		}
 	}
 }

@@ -1,12 +1,21 @@
 # Contributing
 
-The active implementation requires Go 1.25+ and uses only the standard library.
-Do not add third-party module requirements or move business logic into shell.
+The active implementation requires Go 1.25 or newer and uses only the standard
+library. Do not add third-party module requirements or move application logic
+into shell.
 
-Run all checks:
+Keep the canonical v0.1 surface limited to doctor, workspace, repository
+list/clone/status/sync, top-level configure/build/test, and Bash completion.
+Do not add commands that reset, clean, stash, check out, rebase, commit, push,
+delete branches, force updates, publish releases, or open pull requests.
+
+Run:
 
 ```bash
 gofmt -w ./cmd ./internal
+go mod tidy
+test ! -e go.sum
+! grep -q '^require' go.mod
 go vet ./...
 go test ./...
 go test -race ./...
@@ -14,20 +23,17 @@ CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
 /tmp/asc --help
 /tmp/asc --version
 scripts/test_install.sh /tmp/asc
-scripts/package_update.sh --binary /tmp/asc --output /tmp/asc-release-test --os linux --arch amd64
-go mod tidy
+git diff --check
 ```
 
 Tests must remain offline and independent of live GitHub, user tokens, SSH keys,
-home directories, global Git configuration, and the clock. Use `httptest`, fake
-runners, `t.TempDir`, synthetic `asc-cmake` distributions, and repository-local
-Git identities. Vendor tests must never inspect or change real sibling checkouts.
-Self-update tests must use local HTTP servers and temporary managed prefixes.
+home directories, global Git configuration, locale, and mutable sibling
+repositories. Use `httptest`, fake runners, `t.TempDir`, and repository-local
+Git identities.
 
 Preserve argument-slice process execution, direct-child containment, token
-redaction, bounded HTTP reads, and fast-forward-only sync. Commit and push are
-allowed only inside the reviewed `repo save` transaction; do not introduce other
-commands that discard work, rewrite history, commit, push, or publish.
+redaction, bounded HTTP reads and pagination, clone non-overwrite behavior, and
+fast-forward-only sync. Update tests and user documentation with every behavior
+change.
 
-Update tests and command documentation with behavior changes. Contributions are
-licensed under Apache-2.0.
+Contributions are licensed under Apache-2.0.

@@ -1,112 +1,159 @@
 # Architecture
 
-`asc` is one `CGO_ENABLED=0` Go binary built entirely from the standard library.
-`cmd/asc` owns signals, linker-provided version values, and the sole `os.Exit`.
-`internal/app` parses explicit commands, coordinates services, separates output
-streams, and defines exit codes.
+`asc` is one `CGO_ENABLED=0` Go binary built with the standard library only.
+Git is its sole universal external executable; CMake and CTest are required only
+by their wrappers.
 
-## Package boundaries
+## Boundaries
 
-- `config` loads strict JSON, applies CLI/environment/file/default precedence,
-  expands home paths, validates workspace/name safety, and selects API tokens.
-- `process` is the only `os/exec` boundary. It captures or streams output,
-  propagates cancellation, distinguishes missing executables, and wraps exit
-  status.
-- `github` calls the REST API with bounded timeouts and response sizes,
-  pagination, required headers, optional bearer authentication, and actionable
+- `cmd/asc` owns signal cancellation, linker-provided version values, and the
+  only call to `os.Exit`.
+- `internal/app` parses the fixed command tree, loads configuration, coordinates
+  services, writes requested data to stdout, writes diagnostics to stderr, and
+  defines exit codes.
+- `internal/config` loads strict JSON and applies
+  CLI → environment → file → default precedence. It expands home paths, cleans
+  and validates workspace paths, validates names, and selects an in-memory API
+  token.
+- `internal/process` is the only `os/exec` boundary. Commands are executable
+  names plus argument slices. It supports context cancellation, captured or
+  streamed output, missing-executable errors, external exit codes, and
+  display-only quoting.
+- `internal/github` calls the GitHub REST API with required headers, optional
+  bearer authentication, a 15-second HTTP client timeout, caller cancellation,
+  response-size limits, bounded pagination, stable filtering, and actionable
   status errors.
-- `workspace` constructs and verifies direct children, excludes symlinks, and
-  discovers only immediate managed Git worktrees. It also plans, creates, and
-  validates the fixed coordination directory layout and scaffolds non-overwriting
-  draft agent definitions.
-- `workflow` validates bounded, strict schema-v1 JSON manifests and their state
-  references without executing a workflow.
-- `git` plans clone operations from API URLs, verifies existing remotes, parses
-  porcelain-v2 status, implements download-only fast-forward sync, and provides
-  a reviewed single-repository commit/push save transaction.
-- `cmake` plans grouped configure/build/test/workflow commands, delegates preset
-  interpretation to CMake/CTest, and streams from the repository root.
-- `cmakevendor` validates local sources, strict manifests, hashes and update
-  plans independently of CLI rendering, then applies an approved plan with
-  staged replacements and rollback.
-- `doctor` returns structured, read-only checks for configuration, tools, REST
-  access/authentication, SSH, workspace, and PATH.
-- `completion` embeds the static Bash definition printed by the application.
-- `selfupdate` reads bounded release metadata and assets, compares versions,
-  verifies SHA-256, extracts only a strict archive root, and delegates replacement
-  to the managed installer.
+- `internal/workspace` proves direct-child containment, rejects repository
+  symlinks, and discovers only immediate managed Git worktrees.
+- `internal/git` plans and applies safe clone, parses porcelain-v2 status, and
+  performs download-only synchronization through fetch plus `merge --ff-only`.
+- `internal/cmake` validates a direct-child repository and explicit preset, asks
+  CMake/CTest to list the relevant preset class, and streams the requested tool
+  from the repository root.
+- `internal/doctor` returns structured read-only checks for configuration,
+  workspace, tools, REST access/authentication, SSH, and `PATH`.
+- `internal/completion` embeds the static Bash definition printed by the CLI.
 
-Domain packages do not import CLI presentation. Interfaces are defined only at
-the process and doctor consumers where substitution is needed by tests.
+Domain packages do not import CLI presentation.
 
-## Trust boundaries
+## Execution flow
 
-Configuration, environment, API responses, paths, Git output, names, and process
-errors are untrusted. JSON rejects unknown fields. A repository name must be a
-single safe path segment and satisfy the managed prefix policy. `filepath.Rel`
-must prove every destination is exactly one direct child. `os.Lstat` prevents a
-repository symlink from crossing the workspace boundary.
+1. `main` creates a signal-aware context and passes arguments to `app.Run`.
+2. The app parses global flags before the command.
+3. Help and version return before configuration loading or network work.
+4. Other commands load a fully resolved, validated configuration.
+5. The app selects a domain service and renders its deterministic result.
+6. Errors return an exit code; only `main` terminates the process.
 
-Tokens remain in memory, are sent only as an authorization header, and are
-excluded from errors and JSON. API error reads are capped at 8 KiB; successful
-responses are capped at 4 MiB. The HTTP client has a 15-second timeout and all
-operations accept `context.Context` cancellation.
+`workspace` and `completion` require no external command. `repo status` uses
+only local Git. `repo list` and clone discovery use REST. Doctor intentionally
+uses REST and a bounded SSH probe. Real sync uses Git network transport.
 
-Self-update trusts GitHub release metadata under the fixed
-`AI4SciComp/asc-devtools` repository, but not archive contents. It authenticates
-with the normal token when available, caps metadata/checksum/archive/extracted
-sizes, requires `SHA256SUMS`, rejects link and traversal entries, and accepts only
-the implementation-specific archive root. The existing installation manifest
-and installer hash checks remain the final overwrite boundary.
+## Configuration and identity
 
-External commands are executable names plus argument slices. Human dry-run
-descriptions are quoted only for display and are never parsed back into commands.
+Configuration is data, not executable input. `encoding/json` rejects unknown
+fields and trailing values. Missing configuration is normal. A leading `~` or
+`~/` is expanded with `os.UserHomeDir`; other tilde forms are rejected.
 
-## Mutation model
+Repository names must be safe GitHub path segments and satisfy the configured
+prefix policy, except for optional `.github`. Organization, repository, remote,
+path, environment, API response, and Git output values are all treated as
+untrusted.
 
-Clone creates a missing direct child only. An existing destination must be a
-non-symlink Git worktree whose configured remote matches the API repository;
-otherwise it is retained and failed.
+The API token remains in memory, is sent only in an authorization header, and
+is omitted from JSON and errors. Git transport credentials remain Git's
+responsibility.
 
-Sync first validates cleanliness, remote, branch, and matching upstream. Dry-run
-stops after these checks. A real sync fetches the configured remote and attempts
-only `merge --ff-only`. Independent repository failures are accumulated and
-reported deterministically.
+## Path trust model
 
-Save separates review from mutation. Its plan snapshots porcelain-v2 status and
-renders exact argument arrays. Apply rejects a changed snapshot, fetches and
-requires the remote not to be ahead, then stages all paths, commits only a
-nonempty index, and pushes the exact upstream branch. It never pulls, rebases,
-forces, changes branches, or resolves conflicts. A failed push leaves the local
-commit intact for diagnosis or retry.
+The workspace is a cleaned absolute path and may not be a filesystem root.
+`filepath.Rel` proves that every repository destination is exactly one direct
+child. `os.Lstat` rejects a destination or discovered repository symlink.
 
-Go is the only runtime implementation in the canonical tree. Installer,
-packaging, and completion shell files are narrow operational boundaries rather
-than alternate implementations. Prior Python, Bash, and standalone Go history is
-preserved in Git and in the recorded migration bundle.
+Clone creates a missing workspace and destination only through `git clone`.
+An existing target must be a nonsymlink Git worktree whose configured remote
+matches the API repository. Other data is never overwritten or deleted.
+Before execution, clone URLs must exactly match the expected GitHub SSH or
+HTTPS URL for the configured organization and repository, preventing an
+untrusted response from selecting another transport or local source.
 
-Workspace initialization is its own conservative transaction: it plans the
-fixed target list, rejects files and symlinks, creates only missing directories,
-and attempts to remove directories created by the current call if creation
-fails. Agent initialization validates one lowercase path segment, refuses an
-existing target, and writes only a draft `AGENT.md`.
+## Git mutation model
 
-Workflow validation never runs steps or commands. It rejects symlinked workflow
-directories and manifests, caps input at 1 MiB, rejects trailing values and
-unknown fields, and validates schema version, unique states, state references,
-and transitions against `schemas/workflow-v1.schema.json`.
+Status uses:
 
-## Vendoring trust model
+```text
+git -C PATH status --porcelain=v2 --branch
+```
 
-Vendoring never downloads. Its source is the checked-out sibling `asc-cmake` or
-an explicit local path. Git supplies commit, origin, ref, and dirty-state checks;
-`VERSION`, then CMake project version, then an exact tag supplies the version.
-`distribution.json` can enumerate exact files; otherwise only `LICENSE` and
-regular nonsymlink `modules/**/*.cmake` files are managed.
+Sync first validates cleanliness, the configured remote, attached branch, and
+an upstream on that remote. Dry-run stops after validation and only renders:
 
-`ASC_CMAKE_MANIFEST.json` is strict schema-v1 JSON with sorted slash-separated
-paths and SHA-256 hashes. It omits a timestamp for byte-for-byte reproducibility.
-Extra files are reported and preserved. A recorded file can be replaced or
-removed only while its current bytes still match the old manifest. Apply stages
-new bytes below the consumer, writes the manifest last, and rolls back changes
-from the current operation if a replacement fails.
+```text
+git -C PATH fetch -- REMOTE
+git -C PATH merge --ff-only UPSTREAM
+```
+
+Real sync executes those exact operations. A dirty, detached, no-upstream,
+wrong-remote, or non-fast-forward repository is left for manual resolution.
+
+There is no code path for reset, clean, stash, checkout, rebase, commit, push,
+force, branch deletion, conflict resolution, release publication, or pull
+request creation.
+
+## REST safety
+
+REST discovery:
+
+- uses `net/http` and `context.Context`;
+- sends GitHub media type, API version, and user-agent headers;
+- sends `Authorization` only for a nonempty token;
+- caps successful bodies at 4 MiB and error reads at 8 KiB;
+- caps pagination at 1,000 pages;
+- filters archived and unsafe repository data;
+- returns stable name-sorted results;
+- redacts response bodies and tokens from errors.
+
+The HTTP client and base URL are injectable for deterministic `httptest`
+coverage.
+
+## CMake boundary
+
+Scientific repositories own their CMake policy and presets. `asc` passes an
+explicit preset to CMake/CTest and does not parse preset files, guess defaults,
+vendor modules, sync Git, or alter build configuration.
+
+Configure requires `CMakeLists.txt` plus a preset file. Build and test require a
+preset file. Preset membership is delegated to:
+
+```text
+cmake --list-presets
+cmake --list-presets=build
+ctest --list-presets
+```
+
+The selected process streams output and an external exit status from 1 through
+125 is preserved.
+
+## Test strategy
+
+Tests use only the Go standard library:
+
+- table-driven configuration and validation tests;
+- `httptest.Server` for REST headers, pagination, authentication, errors, size
+  limits, timeout, and cancellation;
+- fake runners for exact process argument and CLI-output contracts;
+- temporary local and bare Git repositories for fast-forward and divergence;
+- `t.TempDir` for workspace and installer isolation.
+
+Tests do not depend on live GitHub, user credentials, SSH keys, the user's home,
+global Git configuration, locale, or mutable sibling checkouts.
+
+## Distribution
+
+The runtime is the Go binary. The Bash files are narrow distribution boundaries:
+the embedded completion definition and hash-guarded install/uninstall lifecycle.
+They do not implement application business logic.
+
+The module language floor is Go 1.25. CI tests the supported Go 1.25 and 1.26
+lines and verifies that `go mod tidy` creates no `require` directive or
+`go.sum`.

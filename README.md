@@ -1,109 +1,83 @@
 # asc-devtools
 
-`asc-devtools` provides one dependency-free Go binary, `asc`, for conservative
-local development workflows across repositories owned by
-[`AI4SciComp`](https://github.com/AI4SciComp). It discovers organization
-repositories through the GitHub REST API, clones missing worktrees, reports Git
-state, performs fast-forward-only updates, and invokes repository-owned CMake
-presets. It also initializes and validates the local coordination workspace,
-scaffolds draft agent definitions, and validates versioned workflow manifests.
+`asc-devtools` provides `asc`, a small dependency-free Go CLI for conservative
+local operations across repositories in the
+[`AI4SciComp`](https://github.com/AI4SciComp) organization.
 
-This is developer infrastructure. It changes remote Git state only through the
-explicit, reviewed `repo save` workflow. It does not change branches, publish
-releases, execute agents or workflows, or implement scientific models.
+It can discover and clone organization repositories, report local Git status,
+download clean fast-forwards, and invoke repository-owned CMake/CTest presets.
+It is developer infrastructure: it does not implement scientific models, run
+agents, publish releases, open pull requests, or modify remote Git history.
 
-## Prerequisites
+## Requirements
 
-- A released `asc` binary has no language-runtime dependency.
-- Git is required for repository commands.
-- Network access to the GitHub REST API is required for discovery and updates.
-- SSH is required only for SSH clone/push transport and the doctor probe.
-- CMake and CTest are required only by their corresponding workflow commands.
-- Go 1.25 or newer is required only when building from source.
+- Git for repository commands.
+- Network access for GitHub discovery, clone, and sync.
+- CMake for `configure` and `build`; CTest for `test`.
+- Go 1.25 or newer only when building from source.
+- Bash and `sha256sum` only for the supplied install/uninstall scripts.
 
-GitHub CLI (`gh`) is neither required nor invoked.
+The binary uses only the Go standard library. GitHub CLI (`gh`) is not required
+or invoked at runtime.
 
-The binary uses only the Go standard library. There are no linked third-party
-modules, and runtime users do not need Go, Python, Node.js, Ruby, jq, or a package
-manager.
+## Install on Ubuntu or WSL2
 
-## Build and install on WSL2
+Build and install under the default `/usr/local` prefix:
 
 ```bash
 CGO_ENABLED=0 go build -buildvcs=false -trimpath \
   -ldflags "-s -w -X main.version=0.1.0" \
-  -o ./dist/asc ./cmd/asc
-sudo ./scripts/install.sh --binary ./dist/asc
+  -o ./asc ./cmd/asc
+sudo ./scripts/install.sh --binary ./asc
 asc --version
 ```
 
-The default prefix is `/usr/local`, so the executable is installed at
-`/usr/local/bin/asc` and is normally available on `PATH`. The installer also
-adds Bash completion and a hash manifest used to protect upgrades and removal.
-
-To build and install in one step, including when `sudo` omits the conventional
-`/usr/local/go/bin` directory from `PATH`:
-
-```bash
-sudo ./scripts/install.sh
-```
-
-The installer also accepts an explicit Go executable for toolchains installed
-elsewhere:
-
-```bash
-sudo ./scripts/install.sh --go "$(command -v go)"
-```
-
-Use another system prefix or a packaging staging root explicitly:
-
-```bash
-sudo ./scripts/install.sh --binary ./dist/asc --prefix /opt/asc
-./scripts/install.sh --binary ./dist/asc --destdir "${DESTDIR}"
-```
-
-Uninstall the exact managed files with:
-
-```bash
-sudo ./scripts/uninstall.sh
-```
-
-Neither script downloads tools, invokes `sudo`, changes shell configuration, or
-recursively deletes a prefix. See [installation.md](docs/installation.md).
-
-## Authentication
-
-`AI4SciComp` is the repository owner. `escapetiger` is a personal account that
-may supply credentials; authentication never changes repository ownership.
-
-Public REST discovery works without authentication. Private repositories and
-higher API limits require a token, selected in this order:
+The installer places these exact managed files:
 
 ```text
-ASC_GITHUB_TOKEN
-GH_TOKEN
-GITHUB_TOKEN
+/usr/local/bin/asc
+/usr/local/share/bash-completion/completions/asc
+/usr/local/share/asc-devtools/install-manifest
 ```
 
-To avoid putting a token in shell history:
+It refuses to overwrite a modified managed file or an unrelated installation.
+For a user-local install, use `--prefix "${HOME}/.local"` and ensure
+`~/.local/bin` is on `PATH`. See [installation](docs/installation.md).
+
+## Five-minute start
 
 ```bash
-read -rsp 'GitHub token: ' ASC_GITHUB_TOKEN
-printf '\n'
-export ASC_GITHUB_TOKEN
+asc doctor
+asc workspace
+asc repo list
+asc repo clone asc-cpp --protocol ssh
+asc repo status
+asc repo sync --dry-run
+asc repo sync
+asc configure asc-cpp --preset dev
+asc build asc-cpp --preset dev
+asc test asc-cpp --preset dev
 ```
 
-`asc` sends the token only in the GitHub API authorization header, never stores
-or prints it. REST API authentication is distinct from Git transport:
+`~/AI4SciComp` is the default umbrella. Its children are independent Git
+repositories:
 
-- SSH clone URLs use a GitHub-associated SSH key.
-- HTTPS clone URLs use Git's configured HTTPS credentials.
-- The REST API uses the token above.
+```text
+~/AI4SciComp/
+├── asc-devtools/
+├── asc-cmake/
+├── asc-cpp/
+├── asc-xde/
+├── asc-kinetic/
+├── asc-lean/
+└── asc-lab/
+```
+
+The umbrella itself is not initialized as a Git repository by `asc`.
 
 ## Configuration
 
-The default file is `~/.config/asc/config.json`; select another with
-`ASC_CONFIG` or global `--config PATH`.
+The default file is `~/.config/asc/config.json`:
 
 ```json
 {
@@ -112,128 +86,106 @@ The default file is `~/.config/asc/config.json`; select another with
   "repositoryPrefix": "asc-",
   "includeDotGitHub": true,
   "cloneProtocol": "ssh",
-  "remote": "origin",
-  "cmake": {
-    "vendorDirectory": "cmake/asc",
-    "sourceRepository": "asc-cmake"
-  }
+  "remote": "origin"
 }
 ```
 
-Precedence is CLI, environment, JSON file, then default. Supported environment
-overrides are `ASC_ORGANIZATION`, `ASC_WORKSPACE`, `ASC_REPOSITORY_PREFIX`,
-`ASC_INCLUDE_DOT_GITHUB`, `ASC_CLONE_PROTOCOL`, and `ASC_REMOTE`. Unknown JSON
-fields and malformed values are rejected.
-
-Global options must precede the command:
+Precedence is command-line option, environment variable, JSON file, then
+built-in default. Global options must precede the command:
 
 ```text
---config PATH --organization NAME --workspace PATH --no-color
+--config PATH
+--organization NAME
+--workspace PATH
+--no-color
+--help
+--version
 ```
 
-## Quick start
+Environment overrides are `ASC_CONFIG`, `ASC_ORGANIZATION`, `ASC_WORKSPACE`,
+`ASC_REPOSITORY_PREFIX`, `ASC_INCLUDE_DOT_GITHUB`, `ASC_CLONE_PROTOCOL`, and
+`ASC_REMOTE`. Unknown JSON fields and unsafe paths or names are rejected.
+
+## Authentication
+
+Public repository discovery requires no token. For private repositories or
+higher API limits, `asc` selects the first nonempty value in this order:
+
+```text
+ASC_GITHUB_TOKEN
+GH_TOKEN
+GITHUB_TOKEN
+```
+
+Set one without placing the value in shell history:
 
 ```bash
-asc doctor
-asc workspace
-asc workspace init --dry-run
-asc workspace init
-asc workspace validate --json
-asc agent init verification-reviewer --dry-run
-asc agent init verification-reviewer
-asc workflow validate
-asc repo list
-asc repo list --json
-asc repo clone asc-cpp --protocol ssh
-asc repo status
-asc repo status --json
-asc repo sync --dry-run
-asc repo sync
-asc repo save asc-cpp --dry-run
-asc repo save asc-cpp
-asc repo save asc-cpp --message "Describe the change"
-asc update --check
-asc configure asc-cpp --preset dev
-asc build asc-cpp --preset dev
-asc test asc-cpp --preset dev
-asc cmake workflow asc-cpp \
-  --configure-preset dev --build-preset dev --test-preset dev
-asc cmake presets asc-cpp
-asc cmake vendor status asc-cpp
-asc cmake vendor plan asc-cpp
-asc cmake vendor apply asc-cpp --yes
-source <(asc completion bash)
+read -rsp 'GitHub token: ' ASC_GITHUB_TOKEN
+printf '\n'
+export ASC_GITHUB_TOKEN
 ```
 
-`asc update` checks the latest GitHub release and updates the currently managed
-installation after confirmation. Use `asc update --check` for a read-only check,
-or `sudo asc update --yes` when the installation prefix requires root access.
-The updater requires a release asset named for the current OS and architecture
-plus `SHA256SUMS`; it verifies the archive before running the same hash-guarded
-installer used above. It never invokes `sudo` itself.
+The token is sent only as a GitHub REST authorization header and is never
+persisted or printed. REST authentication is separate from Git transport:
 
-Clone without names processes every eligible API repository. Status and sync
-without names process managed Git worktrees that are direct workspace children.
+- SSH clones use the API-provided SSH URL and your SSH key.
+- HTTPS clones use the API-provided HTTPS URL and Git's credential handling.
+- Repository discovery uses the REST token above.
 
-`repo sync` is download-only: it fetches and fast-forwards clean worktrees from
-their upstream branches. `repo save` is upload-only and intentionally operates
-on exactly one repository: it reviews a plan, fetches to detect remote changes,
-stages all local changes, commits, and pushes the tracked branch. Without
-`--message`, the local-time message is `Updated at YYYY-MM-DD HH:MM:SS`. It
-refuses remote-ahead, diverged, detached, conflicted, or untracked-branch states.
+## Command surface
 
-## Safety guarantees
+```text
+asc --help
+asc --version
+asc doctor [--json]
+asc workspace
+asc repo list [--json]
+asc repo clone [REPOSITORY...] [--protocol ssh|https]
+asc repo status [REPOSITORY...] [--json]
+asc repo sync [REPOSITORY...] [--dry-run]
+asc configure REPOSITORY --preset PRESET
+asc build REPOSITORY --preset PRESET
+asc test REPOSITORY --preset PRESET
+asc completion bash
+```
 
-- External commands use `os/exec` argument slices; no shell evaluates input.
-- Repository names are validated GitHub path segments, not filesystem paths.
-- Destinations are verified direct children, and repository symlinks are refused.
-- Clone never deletes, replaces, or merges existing destination data.
-- Existing worktrees must point at the expected API repository.
-- Status is local, read-only, nonrecursive, and uses porcelain-v2 output.
-- Sync skips dirty, detached, no-upstream, wrong-remote, and divergent states.
-- Sync performs only fetch plus `merge --ff-only`; dry-run performs neither.
-- Save requires one repository, uses a timestamp message by default, supports a
-  read-only plan, prompts by default, fetches before staging, and preserves a
-  local commit if push fails.
-- Outside `repo save`, there is no reset, clean, stash, rebase, checkout, commit,
-  push, force operation, telemetry, or credential storage.
-- Workspace initialization creates only the documented coordination directories,
-  reports every target, rejects symlinks and files, and rolls back directories
-  created by a failed invocation.
-- Agent initialization validates a single path-safe name, supports dry-run, and
-  refuses to replace an existing definition.
-- Workflow validation is read-only, rejects symlinks and unknown JSON fields,
-  and enforces the checked-in schema-v1 structure and state references.
-- Vendoring reads only a local `asc-cmake` checkout, verifies exact SHA-256
-  content, refuses locally modified managed files, and preserves unmanaged files.
-- GitHub responses and error bodies have size limits and HTTP requests time out.
+See the [command reference](docs/commands.md) and the comprehensive
+[user guide](docs/user-guide.md).
 
-See [commands.md](docs/commands.md) and
-[architecture.md](docs/architecture.md) for exact behavior.
+## Safety
+
+- External programs receive argument slices; no shell evaluates user input.
+- Repository targets must be direct workspace children.
+- Repository symlinks and path traversal are refused.
+- Clone never overwrites an existing destination.
+- Local status uses Git porcelain v2 and does not access the network.
+- Sync skips dirty, detached, no-upstream, wrong-remote, and divergent
+  repositories.
+- Dry-run sync performs neither fetch nor merge.
+- Real sync performs only `git fetch` and `git merge --ff-only`.
+- `asc` never resets, cleans, stashes, checks out, rebases, commits, pushes,
+  deletes branches, resolves conflicts, or edits global configuration.
+- Help, version, workspace, completion, and local status avoid unnecessary
+  network access.
+- JSON is deterministic, color-free, and written only to stdout.
 
 ## Development
 
 ```bash
 gofmt -w ./cmd ./internal
+go mod tidy
 go vet ./...
 go test ./...
 go test -race ./...
 CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
+/tmp/asc --help
+/tmp/asc --version
+scripts/test_install.sh /tmp/asc
+git diff --check
 ```
 
-Tests use only the standard `testing` package, `httptest`, fake process runners,
-and temporary local Git repositories. They never use live GitHub or user state.
-
-Go is the sole runtime implementation. The removed Python and Bash source trees
-remain recoverable from repository history and the preservation bundle recorded
-in [the migration ledger](docs/migration/go-only.md). Small installer,
-packaging, and completion shell files remain intentionally.
-
-The current dynamic workspace includes `asc-devtools`, `asc-cmake`, `asc-cpp`,
-`asc-xde`, `asc-kinetic`, `asc-lean`, and `asc-lab`, plus optional `.github`.
-Discovery remains API-driven rather than hard-coded. Scientific repositories own
-their `CMakePresets.json`; `asc-cmake` supplies shared modules for offline,
-reproducible vendoring without moving build policy into this CLI. Configure never
-updates vendored files automatically, and users review and commit vendor changes.
+Go is the sole runtime implementation. Legacy implementation history and its
+disposition are recorded in the
+[Go-only migration ledger](docs/migration/go-only.md).
 
 Licensed under Apache-2.0. See [LICENSE](LICENSE).
