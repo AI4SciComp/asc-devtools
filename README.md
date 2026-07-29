@@ -146,7 +146,7 @@ asc repo list [--json]
 asc repo clone [REPOSITORY...] [--protocol ssh|https]
 asc repo status [REPOSITORY...] [--json]
 asc repo sync [REPOSITORY...] [--dry-run]
-asc repo save [REPOSITORY] [--message TEXT] [--dry-run] [--yes] [--force]
+asc repo save [REPOSITORY] [--branch BRANCH] [--message TEXT] [--dry-run] [--yes] [--force]
 asc configure REPOSITORY --preset PRESET
 asc build REPOSITORY --preset PRESET
 asc test REPOSITORY --preset PRESET
@@ -169,8 +169,10 @@ See the [command reference](docs/commands.md) and the comprehensive
 - Real sync performs only `git fetch` and `git merge --ff-only`.
 - Save operates on one managed repository, shows a reviewable plan, fetches
   before committing, and refuses remote-ahead or diverged history by default.
+- `repo save --branch BRANCH` pushes the current local `HEAD` to that branch on
+  the configured remote without switching the worktree.
 - `repo save --force` is the only history-overwrite path and must be explicitly
-  requested; it force-pushes the local branch over its tracked remote branch.
+  requested; it force-pushes the local branch over its selected remote branch.
 - Outside `repo save`, `asc` never resets, cleans, stashes, checks out, rebases,
   commits, pushes, deletes branches, resolves conflicts, or edits global
   configuration.

@@ -14,6 +14,8 @@ This project follows Keep a Changelog and Semantic Versioning.
 - Reviewed `repo save` workflow for the current or explicitly selected
   repository, with guarded commit/push behavior and an explicit `--force`
   remote-history override.
+- Explicit `repo save --branch BRANCH` destination selection on the configured
+  remote, including new remote branches and local branches without an upstream.
 - Standard-library tests, static builds, and Go 1.25/1.26 CI.
 
 ### Changed

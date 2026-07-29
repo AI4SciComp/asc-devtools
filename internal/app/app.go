@@ -289,7 +289,7 @@ func runRepo(ctx context.Context, cfg config.Config, arguments []string, depende
 		writeOperations(dependencies.Stdout, operations)
 		return operationsExit(operations)
 	case "save":
-		repository, message, dryRun, yes, force, err := parseRepoSave(commandArguments)
+		repository, branch, message, dryRun, yes, force, err := parseRepoSave(commandArguments)
 		if err != nil {
 			return usageError(dependencies.Stderr, err.Error(), repoSaveUsage)
 		}
@@ -304,7 +304,7 @@ func runRepo(ctx context.Context, cfg config.Config, arguments []string, depende
 				return operationalError(dependencies.Stderr, err)
 			}
 		}
-		plan, err := manager.PlanSave(ctx, repository, message, force)
+		plan, err := manager.PlanSaveBranch(ctx, repository, branch, message, force)
 		if err != nil {
 			return operationalError(dependencies.Stderr, err)
 		}
@@ -315,9 +315,9 @@ func runRepo(ctx context.Context, cfg config.Config, arguments []string, depende
 		if !yes {
 			writeSavePlan(dependencies.Stderr, plan)
 			if force {
-				fmt.Fprint(dependencies.Stderr, "Commit all listed changes and overwrite the remote branch? [y/N] ")
+				fmt.Fprintf(dependencies.Stderr, "Commit all listed changes and overwrite %s? [y/N] ", plan.Upstream)
 			} else {
-				fmt.Fprint(dependencies.Stderr, "Commit all listed working-tree changes and push? [y/N] ")
+				fmt.Fprintf(dependencies.Stderr, "Commit all listed working-tree changes and push to %s? [y/N] ", plan.Upstream)
 			}
 			line, readErr := bufio.NewReader(dependencies.Stdin).ReadString('\n')
 			answer := strings.ToLower(strings.TrimSpace(line))
@@ -334,12 +334,21 @@ func runRepo(ctx context.Context, cfg config.Config, arguments []string, depende
 	}
 }
 
-func parseRepoSave(arguments []string) (repository, message string, dryRun, yes, force bool, err error) {
+func parseRepoSave(arguments []string) (repository, branch, message string, dryRun, yes, force bool, err error) {
 	for index := 0; index < len(arguments); index++ {
 		switch arguments[index] {
+		case "--branch":
+			if index+1 >= len(arguments) {
+				return "", "", "", false, false, false, errors.New("--branch requires a value")
+			}
+			branch = arguments[index+1]
+			if branch == "" {
+				return "", "", "", false, false, false, errors.New("--branch requires a nonempty value")
+			}
+			index++
 		case "--message":
 			if index+1 >= len(arguments) {
-				return "", "", false, false, false, errors.New("--message requires a value")
+				return "", "", "", false, false, false, errors.New("--message requires a value")
 			}
 			message = arguments[index+1]
 			index++
@@ -351,10 +360,10 @@ func parseRepoSave(arguments []string) (repository, message string, dryRun, yes,
 			force = true
 		default:
 			if strings.HasPrefix(arguments[index], "-") {
-				return "", "", false, false, false, fmt.Errorf("unknown option: %s", arguments[index])
+				return "", "", "", false, false, false, fmt.Errorf("unknown option: %s", arguments[index])
 			}
 			if repository != "" {
-				return "", "", false, false, false, errors.New("repo save takes at most one repository")
+				return "", "", "", false, false, false, errors.New("repo save takes at most one repository")
 			}
 			repository = arguments[index]
 		}
@@ -362,7 +371,7 @@ func parseRepoSave(arguments []string) (repository, message string, dryRun, yes,
 	if message == "" {
 		message = "Updated at " + time.Now().Format("2006-01-02 15:04:05")
 	}
-	return repository, message, dryRun, yes, force, nil
+	return repository, branch, message, dryRun, yes, force, nil
 }
 
 func writeSavePlan(output io.Writer, plan gitrepo.SavePlan) {
@@ -605,7 +614,8 @@ Commands:
   repo clone [NAME...]            Clone missing repositories
   repo status [NAME...] [--json]  Inspect local repositories
   repo sync [NAME...] [--dry-run] Download remote fast-forwards into clean repositories
-  repo save [NAME] [--force]      Commit local changes and push the tracked branch
+  repo save [NAME] [--branch BRANCH] [--force]
+                                    Commit local changes and push a selected branch
   configure NAME --preset PRESET  Configure a CMake preset
   build NAME --preset PRESET      Build a CMake preset
   test NAME --preset PRESET       Run a CTest preset
@@ -627,7 +637,7 @@ const repoListUsage = "Usage: asc repo list [--json]\n"
 const repoCloneUsage = "Usage: asc repo clone [REPOSITORY...] [--protocol ssh|https]\n"
 const repoStatusUsage = "Usage: asc repo status [REPOSITORY...] [--json]\n"
 const repoSyncUsage = "Usage: asc repo sync [REPOSITORY...] [--dry-run]\n"
-const repoSaveUsage = "Usage: asc repo save [REPOSITORY] [--message TEXT] [--dry-run] [--yes] [--force]\n"
+const repoSaveUsage = "Usage: asc repo save [REPOSITORY] [--branch BRANCH] [--message TEXT] [--dry-run] [--yes] [--force]\n"
 const completionUsage = "Usage: asc completion bash\n"
 
 func cmakeUsage(operation string) string {

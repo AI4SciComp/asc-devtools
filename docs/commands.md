@@ -172,23 +172,26 @@ Outcomes are `planned`, `updated`, `unchanged`, `skipped`, and `failed`.
 `skipped` or `failed` makes the overall command return `1` after all independent
 repositories are processed.
 
-## `asc repo save [REPOSITORY] [--message TEXT] [--dry-run] [--yes] [--force]`
+## `asc repo save [REPOSITORY] [--branch BRANCH] [--message TEXT] [--dry-run] [--yes] [--force]`
 
 Save stages all changes, creates a commit when needed, and pushes the current
-branch to its configured upstream. When `REPOSITORY` is omitted, the Git
-worktree containing the current directory must be a managed direct child of the
-configured workspace. An explicit repository name selects that managed
-worktree instead.
+local `HEAD` to a branch on the configured remote. When `REPOSITORY` is omitted,
+the Git worktree containing the current directory must be a managed direct
+child of the configured workspace. An explicit repository name selects that
+managed worktree instead.
 
 The default commit message is `Updated at YYYY-MM-DD HH:MM:SS` in local time.
 `--message` accepts a nonempty, single-line message of at most 500 characters.
-The branch must be attached and track a branch on the configured remote;
-unresolved conflicts are refused.
+Without `--branch`, the attached local branch must track a branch on the
+configured remote, and that upstream is the destination. `--branch BRANCH`
+instead selects an explicit destination on the configured remote, including a
+new remote branch; it does not check out or switch the local branch. Detached
+worktrees and unresolved conflicts are refused.
 
 Save first creates a local-only plan containing the applicable commands:
 
 ```text
-git -C PATH fetch -- REMOTE
+git -C PATH fetch --prune -- REMOTE '+refs/heads/*:refs/remotes/REMOTE/*'
 git -C PATH add --all --
 git -C PATH commit -m MESSAGE
 git -C PATH push -- REMOTE HEAD:refs/heads/BRANCH
@@ -197,7 +200,8 @@ git -C PATH push -- REMOTE HEAD:refs/heads/BRANCH
 `--dry-run` prints the plan without fetching, staging, committing, or pushing.
 A real save prints the plan to stderr and asks for confirmation unless `--yes`
 is present. After confirmation it rechecks the working-tree snapshot, fetches,
-and refuses remote-ahead or diverged history before staging local changes.
+and refuses remote-ahead or diverged destination history before staging local
+changes. A missing destination is created by the final push.
 
 `--force` explicitly selects the destructive override path. It changes the
 final command to:
@@ -207,9 +211,10 @@ git -C PATH push --force -- REMOTE HEAD:refs/heads/BRANCH
 ```
 
 With this option, remote-ahead and diverged history do not block the save; the
-local branch replaces the tracked remote branch. Detached branches, missing or
-wrong-remote upstreams, conflicts, fetch failures, and commit failures remain
-blocked. Outcomes are `saved`, `unchanged`, `skipped`, and `failed`.
+local branch replaces the selected remote branch. Detached branches, invalid
+explicit branch names, conflicts, fetch failures, and commit failures remain
+blocked. A missing or wrong-remote upstream is also blocked when `--branch` is
+not supplied. Outcomes are `saved`, `unchanged`, `skipped`, and `failed`.
 
 ## `asc configure REPOSITORY --preset PRESET`
 

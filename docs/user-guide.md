@@ -421,17 +421,30 @@ local commits to the current branch's configured-remote upstream. Without
 `--yes`, a real save prints the plan and prompts before doing network or
 filesystem mutations.
 
+To select the destination branch on the configured remote explicitly:
+
+```bash
+asc repo save --branch feature/selected --dry-run
+asc repo save --branch feature/selected --yes
+```
+
+This pushes the current local `HEAD` to `feature/selected`; it does not switch
+the worktree. The option can create a new remote branch and can be used when
+the attached local branch has no upstream. Without `--branch`, save retains the
+existing behavior of targeting the configured-remote upstream.
+
 After confirmation, save rechecks the reviewed status, fetches, and refuses
 remote-ahead or diverged history before it stages or commits. To deliberately
 replace that remote history with the local branch:
 
 ```bash
 asc repo save --force
+asc repo save --branch main --force
 ```
 
 The force flag changes the final operation to `git push --force`; it is
 destructive and can discard remote commits. It does not bypass containment,
-branch/upstream, conflict, fetch, stage, or commit checks.
+branch-name, conflict, fetch, stage, or commit checks.
 
 ### Configure, build, and test
 
@@ -602,7 +615,8 @@ outcomes.
 - Ordinary save refuses remote-ahead and diverged histories.
 - Force save is the only remote-history overwrite path and requires an explicit
   `--force`.
-- Detached, no-upstream, wrong-remote, and conflicted worktrees are not saved.
+- Detached and conflicted worktrees are not saved. No-upstream or wrong-remote
+  worktrees require an explicit configured-remote destination via `--branch`.
 - External commands use `os/exec` argument slices, never `sh -c`.
 - REST requests use cancellation, a 15-second client timeout, response-size
   limits, pagination bounds, and required GitHub headers.
@@ -679,7 +693,10 @@ git -C "${HOME}/AI4SciComp/asc-cpp" status --short --branch
 git -C "${HOME}/AI4SciComp/asc-cpp" branch -vv
 ```
 
-Choose a branch/upstream manually using normal Git workflows.
+Choose a branch/upstream manually using normal Git workflows. For save only,
+an attached local branch can instead select its configured-remote destination
+explicitly with `asc repo save --branch BRANCH`; sync still requires an
+upstream.
 
 ### Diverged repository
 

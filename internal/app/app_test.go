@@ -138,21 +138,24 @@ func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 		}
 	}
 	code, stdout, stderr = runApp(t, []string{"repo", "save", "--help"}, nil, nil, nil)
-	if code != ExitSuccess || !strings.Contains(stdout, "--force") || stderr != "" {
+	if code != ExitSuccess || !strings.Contains(stdout, "--branch BRANCH") || !strings.Contains(stdout, "--force") || stderr != "" {
 		t.Fatalf("repo save help = %d, %q, %q", code, stdout, stderr)
 	}
-	repository, message, dryRun, yes, force, err := parseRepoSave([]string{
-		"asc-one", "--message", "Save work", "--dry-run", "--yes", "--force",
+	repository, branch, message, dryRun, yes, force, err := parseRepoSave([]string{
+		"asc-one", "--branch", "release/v1", "--message", "Save work", "--dry-run", "--yes", "--force",
 	})
-	if err != nil || repository != "asc-one" || message != "Save work" || !dryRun || !yes || !force {
-		t.Fatalf("parseRepoSave() = %q, %q, %v, %v, %v, %v", repository, message, dryRun, yes, force, err)
+	if err != nil || repository != "asc-one" || branch != "release/v1" || message != "Save work" || !dryRun || !yes || !force {
+		t.Fatalf("parseRepoSave() = %q, %q, %q, %v, %v, %v, %v", repository, branch, message, dryRun, yes, force, err)
 	}
-	repository, message, dryRun, yes, force, err = parseRepoSave(nil)
-	if err != nil || repository != "" || dryRun || yes || force {
-		t.Fatalf("parseRepoSave(current) = %q, %q, %v, %v, %v, %v", repository, message, dryRun, yes, force, err)
+	repository, branch, message, dryRun, yes, force, err = parseRepoSave(nil)
+	if err != nil || repository != "" || branch != "" || dryRun || yes || force {
+		t.Fatalf("parseRepoSave(current) = %q, %q, %q, %v, %v, %v, %v", repository, branch, message, dryRun, yes, force, err)
 	}
 	if _, err := time.Parse("Updated at 2006-01-02 15:04:05", message); err != nil {
 		t.Fatalf("default save message = %q: %v", message, err)
+	}
+	if _, _, _, _, _, _, err := parseRepoSave([]string{"--branch"}); err == nil || !strings.Contains(err.Error(), "requires a value") {
+		t.Fatalf("missing branch value error = %v", err)
 	}
 }
 
@@ -253,10 +256,11 @@ func TestRepositorySaveDryRunRoutesForce(t *testing.T) {
 	}
 	runner := &appRunner{}
 	code, stdout, stderr := runApp(t, []string{
-		"repo", "save", "asc-one", "--message", "Save work", "--force", "--dry-run",
+		"repo", "save", "asc-one", "--branch", "release/v1", "--message", "Save work", "--force", "--dry-run",
 	}, map[string]string{"ASC_WORKSPACE": workspace}, runner, nil)
 	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, "remote history will be overwritten") ||
-		!strings.Contains(stdout, "push --force -- origin HEAD:refs/heads/main") {
+		!strings.Contains(stdout, "saving to origin/release/v1") ||
+		!strings.Contains(stdout, "push --force -- origin HEAD:refs/heads/release/v1") {
 		t.Fatalf("save dry run = %d, %q, %q", code, stdout, stderr)
 	}
 	for _, call := range runner.calls {

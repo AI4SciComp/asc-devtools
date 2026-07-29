@@ -99,16 +99,18 @@ Real sync executes those exact operations. A dirty, detached, no-upstream,
 wrong-remote, or non-fast-forward repository is left for manual resolution.
 
 Save resolves one managed direct-child repository, using the current worktree
-when no name is supplied. It validates the attached branch, configured-remote
-upstream, and conflict-free porcelain snapshot. After plan review, it verifies
-that snapshot again, fetches, compares local and upstream histories, stages all
-changes, commits when needed, and pushes the explicit tracked branch ref.
-Remote-ahead and diverged histories are refused by default.
+when no name is supplied. It validates the attached branch and conflict-free
+porcelain snapshot. The destination is either the configured-remote upstream
+or an explicit configured-remote branch selected with `--branch`; selecting a
+destination never switches the worktree. After plan review, save verifies the
+snapshot again, fetches remote branches, compares local and destination
+histories, stages all changes, commits when needed, and pushes the explicit
+destination ref. Remote-ahead and diverged histories are refused by default.
 
 `--force` is carried in the immutable save plan and adds `--force` to the push.
 It deliberately permits the local branch to replace remote-ahead or diverged
 history. The flag does not bypass worktree containment, attached-branch,
-upstream, conflict, fetch, staging, or commit validation.
+destination-branch, conflict, fetch, staging, or commit validation.
 
 There is no code path for reset, clean, stash, checkout, rebase, branch
 deletion, conflict resolution, release publication, or pull request creation.

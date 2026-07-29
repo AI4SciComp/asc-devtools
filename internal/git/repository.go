@@ -47,14 +47,15 @@ type Status struct {
 
 // SavePlan is an immutable, reviewable plan for committing and pushing one repository.
 type SavePlan struct {
-	Operation Operation `json:"operation"`
-	Branch    string    `json:"branch"`
-	Upstream  string    `json:"upstream"`
-	Changes   int       `json:"changes"`
-	Message   string    `json:"message"`
-	Force     bool      `json:"force"`
-	path      string
-	status    string
+	Operation    Operation `json:"operation"`
+	Branch       string    `json:"branch"`
+	RemoteBranch string    `json:"remoteBranch"`
+	Upstream     string    `json:"upstream"`
+	Changes      int       `json:"changes"`
+	Message      string    `json:"message"`
+	Force        bool      `json:"force"`
+	path         string
+	status       string
 }
 
 type target struct {
@@ -352,6 +353,11 @@ func (m Manager) CurrentRepository(ctx context.Context, directory string) (strin
 
 // PlanSave prepares a local-only commit-and-push plan for exactly one repository.
 func (m Manager) PlanSave(ctx context.Context, name, message string, force bool) (SavePlan, error) {
+	return m.PlanSaveBranch(ctx, name, "", message, force)
+}
+
+// PlanSaveBranch prepares a save plan with an optional explicit remote destination branch.
+func (m Manager) PlanSaveBranch(ctx context.Context, name, branch, message string, force bool) (SavePlan, error) {
 	message = strings.TrimSpace(message)
 	if message == "" || len(message) > 500 || strings.ContainsAny(message, "\x00\r\n") {
 		return SavePlan{}, errors.New("commit message must be 1-500 characters on one line")
@@ -375,22 +381,35 @@ func (m Manager) PlanSave(ctx context.Context, name, message string, force bool)
 	if status.Detached || status.Branch == "" {
 		return SavePlan{}, errors.New("detached HEAD cannot be saved safely")
 	}
-	if status.Upstream == "" {
-		return SavePlan{}, fmt.Errorf("branch %s has no upstream", status.Branch)
-	}
 	remotePrefix := m.Config.Remote + "/"
-	if !strings.HasPrefix(status.Upstream, remotePrefix) || strings.TrimPrefix(status.Upstream, remotePrefix) == "" {
-		return SavePlan{}, fmt.Errorf("upstream does not use configured remote: %s", status.Upstream)
+	remoteBranch := branch
+	upstream := status.Upstream
+	if remoteBranch == "" {
+		if upstream == "" {
+			return SavePlan{}, fmt.Errorf("branch %s has no upstream; select a destination with --branch", status.Branch)
+		}
+		if !strings.HasPrefix(upstream, remotePrefix) || strings.TrimPrefix(upstream, remotePrefix) == "" {
+			return SavePlan{}, fmt.Errorf("upstream does not use configured remote: %s", upstream)
+		}
+		remoteBranch = strings.TrimPrefix(upstream, remotePrefix)
+	} else {
+		if strings.TrimSpace(remoteBranch) != remoteBranch || strings.HasPrefix(remoteBranch, "-") {
+			return SavePlan{}, fmt.Errorf("invalid branch name %q", remoteBranch)
+		}
+		if _, err := m.run(ctx, repository.path, "check-ref-format", "refs/heads/"+remoteBranch); err != nil {
+			return SavePlan{}, fmt.Errorf("invalid branch name %q", remoteBranch)
+		}
+		upstream = remotePrefix + remoteBranch
 	}
 	for _, line := range strings.Split(statusOutput, "\n") {
 		if strings.HasPrefix(line, "u ") {
 			return SavePlan{}, errors.New("repository has unresolved merge conflicts")
 		}
 	}
-	fetch := process.Command{Name: "git", Args: []string{"-C", repository.path, "fetch", "--", m.Config.Remote}}
+	fetchRefspec := "+refs/heads/*:refs/remotes/" + m.Config.Remote + "/*"
+	fetch := process.Command{Name: "git", Args: []string{"-C", repository.path, "fetch", "--prune", "--", m.Config.Remote, fetchRefspec}}
 	add := process.Command{Name: "git", Args: []string{"-C", repository.path, "add", "--all", "--"}}
 	commit := process.Command{Name: "git", Args: []string{"-C", repository.path, "commit", "-m", message}}
-	remoteBranch := strings.TrimPrefix(status.Upstream, remotePrefix)
 	pushArguments := []string{"-C", repository.path, "push"}
 	if force {
 		pushArguments = append(pushArguments, "--force")
@@ -402,19 +421,20 @@ func (m Manager) PlanSave(ctx context.Context, name, message string, force bool)
 		commands = append(commands, process.Describe(add), process.Describe(commit))
 	}
 	commands = append(commands, process.Describe(push))
-	detail := fmt.Sprintf("%d working-tree changes on %s tracking %s", status.Changes, status.Branch, status.Upstream)
+	detail := fmt.Sprintf("%d working-tree changes on %s saving to %s", status.Changes, status.Branch, upstream)
 	if force {
 		detail += " (remote history will be overwritten)"
 	}
 	return SavePlan{
-		Operation: Operation{Name: name, Outcome: "planned", Detail: detail, Plan: commands},
-		Branch:    status.Branch,
-		Upstream:  status.Upstream,
-		Changes:   status.Changes,
-		Message:   message,
-		Force:     force,
-		path:      repository.path,
-		status:    statusOutput,
+		Operation:    Operation{Name: name, Outcome: "planned", Detail: detail, Plan: commands},
+		Branch:       status.Branch,
+		RemoteBranch: remoteBranch,
+		Upstream:     upstream,
+		Changes:      status.Changes,
+		Message:      message,
+		Force:        force,
+		path:         repository.path,
+		status:       statusOutput,
 	}, nil
 }
 
@@ -431,20 +451,35 @@ func (m Manager) ApplySave(ctx context.Context, plan SavePlan) Operation {
 		return operation
 	}
 	if _, err := m.Runner.Run(ctx, process.Command{
-		Name: "git", Args: []string{"-C", plan.path, "fetch", "--", m.Config.Remote}, Stream: true,
+		Name: "git", Args: []string{
+			"-C", plan.path, "fetch", "--prune", "--", m.Config.Remote,
+			"+refs/heads/*:refs/remotes/" + m.Config.Remote + "/*",
+		}, Stream: true,
 	}); err != nil {
 		operation.Outcome, operation.Detail = "failed", "fetch failed: "+err.Error()
 		return operation
 	}
-	counts, err := m.run(ctx, plan.path, "rev-list", "--left-right", "--count", "HEAD..."+plan.Upstream)
-	if err != nil {
-		operation.Outcome, operation.Detail = "failed", "compare upstream: "+err.Error()
+	remoteRef := "refs/remotes/" + m.Config.Remote + "/" + plan.RemoteBranch
+	_, remoteRefError := m.Runner.Run(ctx, process.Command{
+		Name: "git", Args: []string{"-C", plan.path, "show-ref", "--verify", "--quiet", remoteRef},
+	})
+	remoteExists := remoteRefError == nil
+	if remoteRefError != nil && process.ExitCode(remoteRefError, -1) != 1 {
+		operation.Outcome, operation.Detail = "failed", "inspect destination branch: "+remoteRefError.Error()
 		return operation
 	}
-	ahead, behind, err := parseAheadBehind(counts)
-	if err != nil {
-		operation.Outcome, operation.Detail = "failed", err.Error()
-		return operation
+	ahead, behind := 0, 0
+	if remoteExists {
+		counts, err := m.run(ctx, plan.path, "rev-list", "--left-right", "--count", "HEAD..."+remoteRef)
+		if err != nil {
+			operation.Outcome, operation.Detail = "failed", "compare destination branch: "+err.Error()
+			return operation
+		}
+		ahead, behind, err = parseAheadBehind(counts)
+		if err != nil {
+			operation.Outcome, operation.Detail = "failed", err.Error()
+			return operation
+		}
 	}
 	if behind > 0 && !plan.Force {
 		operation.Outcome = "skipped"
@@ -482,16 +517,15 @@ func (m Manager) ApplySave(ctx context.Context, plan SavePlan) Operation {
 			committed = true
 		}
 	}
-	if ahead == 0 && behind == 0 && !committed {
+	if remoteExists && ahead == 0 && behind == 0 && !committed {
 		operation.Outcome, operation.Detail = "unchanged", "nothing to commit or push"
 		return operation
 	}
-	remoteBranch := strings.TrimPrefix(plan.Upstream, m.Config.Remote+"/")
 	pushArguments := []string{"-C", plan.path, "push"}
 	if plan.Force {
 		pushArguments = append(pushArguments, "--force")
 	}
-	pushArguments = append(pushArguments, "--", m.Config.Remote, "HEAD:refs/heads/"+remoteBranch)
+	pushArguments = append(pushArguments, "--", m.Config.Remote, "HEAD:refs/heads/"+plan.RemoteBranch)
 	if _, err := m.Runner.Run(ctx, process.Command{
 		Name: "git", Args: pushArguments, Stream: true,
 	}); err != nil {

@@ -360,6 +360,77 @@ func TestSaveCurrentRepositoryAndForceRemoteOverride(t *testing.T) {
 	}
 }
 
+func TestSaveToSelectedRemoteBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	directory := t.TempDir()
+	bare := filepath.Join(directory, "remote.git")
+	seed := filepath.Join(directory, "seed")
+	workspace := filepath.Join(directory, "workspace")
+	runGit(t, directory, "init", "-q", "--bare", bare)
+	initRepository(t, seed)
+	defaultBranch := strings.TrimSpace(gitOutput(t, seed, "branch", "--show-current"))
+	runGit(t, seed, "remote", "add", "origin", bare)
+	runGit(t, seed, "push", "-qu", "origin", "HEAD")
+	if err := os.Mkdir(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	clone := filepath.Join(workspace, "asc-one")
+	runGit(t, directory, "clone", "-q", bare, clone)
+	runGit(t, clone, "config", "user.name", "Asc Tests")
+	runGit(t, clone, "config", "user.email", "asc-tests@example.invalid")
+	runGit(t, clone, "switch", "-qc", "local-work")
+	if err := os.WriteFile(filepath.Join(clone, "selected.txt"), []byte("selected\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := Manager{Runner: process.OSRunner{}, Config: testConfig(workspace)}
+	plan, err := manager.PlanSaveBranch(context.Background(), "asc-one", "release/v1", "Save selected branch", false)
+	if err != nil || plan.Branch != "local-work" || plan.RemoteBranch != "release/v1" ||
+		plan.Upstream != "origin/release/v1" || !strings.Contains(plan.Operation.Plan[len(plan.Operation.Plan)-1], "HEAD:refs/heads/release/v1") {
+		t.Fatalf("PlanSaveBranch() = %+v, %v", plan, err)
+	}
+	operation := manager.ApplySave(context.Background(), plan)
+	if operation.Outcome != "saved" || !strings.Contains(operation.Detail, "origin/release/v1") {
+		t.Fatalf("ApplySave() = %+v", operation)
+	}
+	if subject := strings.TrimSpace(gitOutput(t, bare, "log", "-1", "--format=%s", "refs/heads/release/v1")); subject != "Save selected branch" {
+		t.Fatalf("selected remote branch subject = %q", subject)
+	}
+	if subject := strings.TrimSpace(gitOutput(t, bare, "log", "-1", "--format=%s", "refs/heads/"+defaultBranch)); subject != "initial" {
+		t.Fatalf("default remote branch was changed: subject = %q", subject)
+	}
+
+	runGit(t, seed, "fetch", "-q", "origin")
+	runGit(t, seed, "switch", "-qc", "remote-release", "origin/release/v1")
+	if err := os.WriteFile(filepath.Join(seed, "remote-selected.txt"), []byte("remote selected\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, seed, "add", "remote-selected.txt")
+	runGit(t, seed, "commit", "-qm", "remote selected update")
+	runGit(t, seed, "push", "-q", "origin", "HEAD:refs/heads/release/v1")
+	if err := os.WriteFile(filepath.Join(clone, "local-selected.txt"), []byte("local selected\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan, err = manager.PlanSaveBranch(context.Background(), "asc-one", "release/v1", "Must not commit selected branch", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation = manager.ApplySave(context.Background(), plan)
+	if operation.Outcome != "skipped" || !strings.Contains(operation.Detail, "--force") {
+		t.Fatalf("remote-ahead selected ApplySave() = %+v", operation)
+	}
+	if subject := strings.TrimSpace(gitOutput(t, clone, "log", "-1", "--format=%s")); subject == "Must not commit selected branch" {
+		t.Fatal("selected-branch save committed before checking destination history")
+	}
+
+	if _, err := manager.PlanSaveBranch(context.Background(), "asc-one", "invalid..branch", "Invalid branch", false); err == nil ||
+		!strings.Contains(err.Error(), "invalid branch name") {
+		t.Fatalf("invalid branch error = %v", err)
+	}
+}
+
 func initRepository(t *testing.T, path string) {
 	t.Helper()
 	if err := os.Mkdir(path, 0o755); err != nil {

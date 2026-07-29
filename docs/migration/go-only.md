@@ -57,9 +57,9 @@ configuration, completion, tests, and documentation were removed before
 publication.
 
 Subsequent feature work restored only the reviewed `repo save` workflow and
-added an explicit `--force` override. The canonical binary still does not reset,
-clean, stash, check out, rebase, delete branches, publish releases, or create
-pull requests.
+added explicit destination-branch selection and a `--force` override. The
+canonical binary still does not reset, clean, stash, check out, rebase, delete
+branches, publish releases, or create pull requests.
 
 ## Intentionally retained shell
 
