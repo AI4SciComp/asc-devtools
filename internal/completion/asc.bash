@@ -10,7 +10,11 @@ _asc_completion() {
   if [[ ${COMP_CWORD} -eq 1 ]]; then
     choices="doctor workspace repo configure build test completion --help --version --config --organization --workspace --no-color"
   elif [[ ${command} == repo && ${COMP_CWORD} -eq 2 ]]; then
-    choices="list clone status sync"
+    choices="list clone status sync save"
+  elif [[ ${command} == repo && ${repo_command} == save && ${previous} == --message ]]; then
+    choices=""
+  elif [[ ${command} == repo && ${repo_command} == save && ${current} == -* ]]; then
+    choices="--message --dry-run --yes --force"
   elif [[ ${previous} == --protocol ]]; then
     choices="ssh https"
   elif [[ ${previous} == --preset ]]; then

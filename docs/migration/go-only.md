@@ -37,6 +37,7 @@ contains the resulting tag objects, deleted branch names, and remote evidence.
 | GitHub REST discovery/authentication | GitHub suites | `internal/github` `httptest` coverage |
 | safe clone and local status | repository suites | `internal/git` and workspace tests |
 | download-only fast-forward sync | repository suites | fake-runner decisions and temporary bare-remote integration |
+| reviewed repository save | earlier implementation history | restored in `internal/git` with current-worktree selection and explicit force-path integration coverage |
 | CMake/CTest wrappers | CMake suites | exact argument and exit-propagation tests |
 | doctor diagnostics | doctor/CLI suites | `internal/doctor` and application JSON tests |
 | process execution safety | process/helper suites | `internal/process` cancellation, missing executable, and exit tests |
@@ -47,16 +48,18 @@ packaging no longer exist. The Go tests retain the canonical contracts with
 temporary workspaces, local HTTP servers, fake runners, and temporary Git
 repositories.
 
-## Excluded migration-stage behavior
+## Migration-stage exclusions and later changes
 
 Earlier local migration work experimented with workspace/agent/workflow
 scaffolding, grouped CMake vendoring, self-update, and repository commit/push
-commands. The final product decision excludes them from v0.1. Their code,
+commands. The consolidation initially excluded them from v0.1, and their code,
 configuration, completion, tests, and documentation were removed before
 publication.
 
-The canonical binary does not reset, clean, stash, check out, rebase, commit,
-push, delete branches, force updates, publish releases, or create pull requests.
+Subsequent feature work restored only the reviewed `repo save` workflow and
+added an explicit `--force` override. The canonical binary still does not reset,
+clean, stash, check out, rebase, delete branches, publish releases, or create
+pull requests.
 
 ## Intentionally retained shell
 

@@ -1,18 +1,19 @@
 # asc-devtools
 
 `asc-devtools` provides `asc`, a small dependency-free Go CLI for conservative
-local operations across repositories in the
+repository operations across the
 [`AI4SciComp`](https://github.com/AI4SciComp) organization.
 
 It can discover and clone organization repositories, report local Git status,
-download clean fast-forwards, and invoke repository-owned CMake/CTest presets.
-It is developer infrastructure: it does not implement scientific models, run
-agents, publish releases, open pull requests, or modify remote Git history.
+download clean fast-forwards, explicitly save local work to a tracked remote
+branch, and invoke repository-owned CMake/CTest presets. It is developer
+infrastructure: it does not implement scientific models, run agents, publish
+releases, or open pull requests.
 
 ## Requirements
 
 - Git for repository commands.
-- Network access for GitHub discovery, clone, and sync.
+- Network access for GitHub discovery, clone, sync, and save.
 - CMake for `configure` and `build`; CTest for `test`.
 - Go 1.25 or newer only when building from source.
 - Bash and `sha256sum` only for the supplied install/uninstall scripts.
@@ -54,6 +55,8 @@ asc repo clone asc-cpp --protocol ssh
 asc repo status
 asc repo sync --dry-run
 asc repo sync
+asc repo save --dry-run
+asc repo save
 asc configure asc-cpp --preset dev
 asc build asc-cpp --preset dev
 asc test asc-cpp --preset dev
@@ -128,8 +131,8 @@ export ASC_GITHUB_TOKEN
 The token is sent only as a GitHub REST authorization header and is never
 persisted or printed. REST authentication is separate from Git transport:
 
-- SSH clones use the API-provided SSH URL and your SSH key.
-- HTTPS clones use the API-provided HTTPS URL and Git's credential handling.
+- SSH Git remotes use your SSH key for clone, fetch, and save.
+- HTTPS Git remotes use Git's credential handling for clone, fetch, and save.
 - Repository discovery uses the REST token above.
 
 ## Command surface
@@ -143,6 +146,7 @@ asc repo list [--json]
 asc repo clone [REPOSITORY...] [--protocol ssh|https]
 asc repo status [REPOSITORY...] [--json]
 asc repo sync [REPOSITORY...] [--dry-run]
+asc repo save [REPOSITORY] [--message TEXT] [--dry-run] [--yes] [--force]
 asc configure REPOSITORY --preset PRESET
 asc build REPOSITORY --preset PRESET
 asc test REPOSITORY --preset PRESET
@@ -163,8 +167,13 @@ See the [command reference](docs/commands.md) and the comprehensive
   repositories.
 - Dry-run sync performs neither fetch nor merge.
 - Real sync performs only `git fetch` and `git merge --ff-only`.
-- `asc` never resets, cleans, stashes, checks out, rebases, commits, pushes,
-  deletes branches, resolves conflicts, or edits global configuration.
+- Save operates on one managed repository, shows a reviewable plan, fetches
+  before committing, and refuses remote-ahead or diverged history by default.
+- `repo save --force` is the only history-overwrite path and must be explicitly
+  requested; it force-pushes the local branch over its tracked remote branch.
+- Outside `repo save`, `asc` never resets, cleans, stashes, checks out, rebases,
+  commits, pushes, deletes branches, resolves conflicts, or edits global
+  configuration.
 - Help, version, workspace, completion, and local status avoid unnecessary
   network access.
 - JSON is deterministic, color-free, and written only to stdout.

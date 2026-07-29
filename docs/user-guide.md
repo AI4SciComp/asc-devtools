@@ -5,22 +5,22 @@ Run `asc --help` for the concise built-in reference.
 
 ## What asc-devtools is
 
-`asc-devtools` is a dependency-free Go command-line tool for routine local work
+`asc-devtools` is a dependency-free Go command-line tool for routine work
 across repositories owned by `AI4SciComp`. It:
 
 - discovers organization repositories through the GitHub REST API;
 - clones repositories into a predictable local umbrella;
 - reports local Git branch and worktree state;
 - downloads fast-forward updates into clean worktrees;
+- reviews, commits, and pushes one repository through an explicit save workflow;
 - invokes CMake and CTest presets owned by each repository;
 - reports environment and authentication readiness;
 - emits stable JSON for discovery, status, and diagnostics.
 
 It is not an agent runner, workflow engine, package manager, CMake policy
 repository, scientific solver, release publisher, or general Git frontend.
-
-In particular, `asc` has no command that commits, pushes, resets, cleans,
-stashes, checks out, rebases, deletes branches, opens pull requests, or publishes
+Commit and push behavior is isolated to `repo save`; `asc` does not reset,
+clean, stash, check out, rebase, delete branches, open pull requests, or publish
 releases.
 
 ## Workspace model
@@ -54,8 +54,8 @@ does not follow a repository destination symlink.
 Runtime:
 
 - Linux or another Go-supported platform;
-- Git for `repo clone`, `repo status`, and `repo sync`;
-- network access for REST discovery, clone, and real sync;
+- Git for `repo clone`, `repo status`, `repo sync`, and `repo save`;
+- network access for REST discovery, clone, real sync, and real save;
 - CMake for `configure` and `build`;
 - CTest for `test`;
 - SSH only when using SSH clone transport or the doctor's SSH probe.
@@ -180,6 +180,13 @@ Apply only clean fast-forwards:
 asc repo sync
 ```
 
+From within a managed repository, review and save local work:
+
+```bash
+asc repo save --dry-run
+asc repo save
+```
+
 For a repository with a `dev` preset:
 
 ```bash
@@ -293,7 +300,7 @@ REST authentication and Git transport solve different problems:
 
 - REST token: lets `repo list` and `repo clone` discover private metadata.
 - SSH: the API-provided `git@github.com:...` URL and an SSH key authenticate
-  `git clone`, `fetch`, and merge-related remote access.
+  `git clone`, `fetch`, and `push`.
 - HTTPS: the API-provided `https://github.com/...` URL and Git's credential
   helper authenticate Git transport.
 
@@ -308,6 +315,7 @@ Choosing SSH does not make an SSH key a REST API token.
 asc --help
 asc --version
 asc repo clone --help
+asc repo save --help
 ```
 
 Help and version use no network. Version output is `asc dev` for an unversioned
@@ -391,6 +399,40 @@ Sync skips dirty worktrees, detached HEAD, missing/wrong upstreams, and
 fast-forward refusals. It does not stash or resolve the situation. Handle those
 cases with Git after reviewing the repository.
 
+### Repository save
+
+From anywhere inside a managed direct-child repository:
+
+```bash
+asc repo save --dry-run
+asc repo save
+```
+
+You may instead select one repository explicitly and supply a commit message:
+
+```bash
+asc repo save asc-cpp --message "Describe the change" --dry-run
+asc repo save asc-cpp --message "Describe the change" --yes
+```
+
+Save stages all changes, commits them when needed, and pushes existing plus new
+local commits to the current branch's configured-remote upstream. Without
+`--message`, the commit subject is `Updated at YYYY-MM-DD HH:MM:SS`. Without
+`--yes`, a real save prints the plan and prompts before doing network or
+filesystem mutations.
+
+After confirmation, save rechecks the reviewed status, fetches, and refuses
+remote-ahead or diverged history before it stages or commits. To deliberately
+replace that remote history with the local branch:
+
+```bash
+asc repo save --force
+```
+
+The force flag changes the final operation to `git push --force`; it is
+destructive and can discard remote commits. It does not bypass containment,
+branch/upstream, conflict, fetch, stage, or commit checks.
+
 ### Configure, build, and test
 
 ```bash
@@ -445,7 +487,14 @@ Only Bash completion is supported in v0.1.
    asc repo sync
    ```
 
-6. Configure, build, and test a repository:
+6. From within a repository, review and upload completed work:
+
+   ```bash
+   asc repo save --dry-run
+   asc repo save
+   ```
+
+7. Configure, build, and test a repository:
 
    ```bash
    asc configure asc-cpp --preset dev
@@ -453,8 +502,8 @@ Only Bash completion is supported in v0.1.
    asc test asc-cpp --preset dev
    ```
 
-Use normal reviewed Git and GitHub workflows outside `asc` for commits, pushes,
-branches, and pull requests.
+Use normal reviewed Git and GitHub workflows for branch management and pull
+requests.
 
 ## JSON output and scripting
 
@@ -531,7 +580,7 @@ printf '%s\n' "${status_json}"
 | Code | Meaning |
 | ---: | --- |
 | `0` | Requested operation completed |
-| `1` | Operational error or partial clone/status/sync failure |
+| `1` | Operational error, refused save, or partial repository failure |
 | `2` | Invalid invocation |
 
 CMake/CTest exit codes 1–125 propagate through their wrappers. Multi-repository
@@ -549,8 +598,11 @@ outcomes.
 - Git status uses porcelain intended for programs.
 - Dry-run sync does not fetch or merge.
 - Real sync is limited to fetch plus `merge --ff-only`.
-- Dirty, detached, no-upstream, wrong-remote, and diverged worktrees are not
-  changed.
+- Save rechecks its reviewed snapshot and fetches before staging or committing.
+- Ordinary save refuses remote-ahead and diverged histories.
+- Force save is the only remote-history overwrite path and requires an explicit
+  `--force`.
+- Detached, no-upstream, wrong-remote, and conflicted worktrees are not saved.
 - External commands use `os/exec` argument slices, never `sh -c`.
 - REST requests use cancellation, a 15-second client timeout, response-size
   limits, pagination bounds, and required GitHub headers.
@@ -559,8 +611,9 @@ outcomes.
 - No telemetry is collected.
 
 Intentionally unsupported operations include reset, clean, stash, checkout,
-rebase, commit, push, branch deletion, force operations, release publication,
-pull-request creation, and conflict resolution.
+rebase, branch deletion, release publication, pull-request creation, and
+conflict resolution. Commit, push, and force operations exist only within the
+explicit `repo save` workflow.
 
 ## Troubleshooting
 
@@ -614,7 +667,8 @@ Sync reports `working tree is dirty` and skips the repository. Review:
 git -C "${HOME}/AI4SciComp/asc-cpp" status
 ```
 
-Commit, discard, or otherwise reconcile changes manually. `asc` will not choose.
+Commit, discard, or otherwise reconcile changes manually, or use `repo save` if
+the intended action is to commit every listed change and push it.
 
 ### Detached HEAD or no upstream
 

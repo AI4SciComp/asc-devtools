@@ -273,6 +273,93 @@ func TestSyncRealFastForwardAndDivergence(t *testing.T) {
 	}
 }
 
+func TestSaveCurrentRepositoryAndForceRemoteOverride(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	directory := t.TempDir()
+	bare := filepath.Join(directory, "remote.git")
+	seed := filepath.Join(directory, "seed")
+	workspace := filepath.Join(directory, "workspace")
+	runGit(t, directory, "init", "-q", "--bare", bare)
+	initRepository(t, seed)
+	runGit(t, seed, "remote", "add", "origin", bare)
+	runGit(t, seed, "push", "-qu", "origin", "HEAD")
+	if err := os.Mkdir(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	clone := filepath.Join(workspace, "asc-one")
+	runGit(t, directory, "clone", "-q", bare, clone)
+	runGit(t, clone, "config", "user.name", "Asc Tests")
+	runGit(t, clone, "config", "user.email", "asc-tests@example.invalid")
+	subdirectory := filepath.Join(clone, "nested")
+	if err := os.Mkdir(subdirectory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	manager := Manager{Runner: process.OSRunner{}, Config: testConfig(workspace)}
+	name, err := manager.CurrentRepository(context.Background(), subdirectory)
+	if err != nil || name != "asc-one" {
+		t.Fatalf("CurrentRepository() = %q, %v", name, err)
+	}
+	if _, err := manager.CurrentRepository(context.Background(), workspace); err == nil {
+		t.Fatal("CurrentRepository() accepted the workspace")
+	}
+
+	if err := os.WriteFile(filepath.Join(clone, "saved.txt"), []byte("saved\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := manager.PlanSave(context.Background(), name, "Save local work", false)
+	if err != nil || plan.Changes != 1 || plan.Force || len(plan.Operation.Plan) != 4 {
+		t.Fatalf("PlanSave() = %+v, %v", plan, err)
+	}
+	operation := manager.ApplySave(context.Background(), plan)
+	if operation.Outcome != "saved" || !strings.Contains(operation.Detail, "committed and pushed") {
+		t.Fatalf("ApplySave() = %+v", operation)
+	}
+	if subject := strings.TrimSpace(gitOutput(t, bare, "log", "-1", "--format=%s")); subject != "Save local work" {
+		t.Fatalf("remote subject = %q", subject)
+	}
+
+	runGit(t, seed, "pull", "-q", "--ff-only")
+	if err := os.WriteFile(filepath.Join(seed, "remote.txt"), []byte("remote\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, seed, "add", "remote.txt")
+	runGit(t, seed, "commit", "-qm", "remote update")
+	runGit(t, seed, "push", "-q")
+	if err := os.WriteFile(filepath.Join(clone, "local.txt"), []byte("local\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err = manager.PlanSave(context.Background(), name, "Must not commit", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation = manager.ApplySave(context.Background(), plan)
+	if operation.Outcome != "skipped" || !strings.Contains(operation.Detail, "--force") {
+		t.Fatalf("remote-ahead ApplySave() = %+v", operation)
+	}
+	if subject := strings.TrimSpace(gitOutput(t, clone, "log", "-1", "--format=%s")); subject == "Must not commit" {
+		t.Fatal("ordinary save committed before checking remote state")
+	}
+
+	plan, err = manager.PlanSave(context.Background(), name, "Force local work", true)
+	if err != nil || !plan.Force || !strings.Contains(plan.Operation.Plan[len(plan.Operation.Plan)-1], "push --force --") {
+		t.Fatalf("force PlanSave() = %+v, %v", plan, err)
+	}
+	operation = manager.ApplySave(context.Background(), plan)
+	if operation.Outcome != "saved" || !strings.Contains(operation.Detail, "force-pushed") {
+		t.Fatalf("force ApplySave() = %+v", operation)
+	}
+	if subject := strings.TrimSpace(gitOutput(t, bare, "log", "-1", "--format=%s")); subject != "Force local work" {
+		t.Fatalf("force-pushed remote subject = %q", subject)
+	}
+	if history := gitOutput(t, bare, "log", "--format=%s"); strings.Contains(history, "remote update") {
+		t.Fatalf("force push retained overwritten remote history:\n%s", history)
+	}
+}
+
 func initRepository(t *testing.T, path string) {
 	t.Helper()
 	if err := os.Mkdir(path, 0o755); err != nil {
@@ -295,4 +382,15 @@ func runGit(t *testing.T, directory string, arguments ...string) {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", arguments, err, output)
 	}
+}
+
+func gitOutput(t *testing.T, directory string, arguments ...string) string {
+	t.Helper()
+	command := exec.Command("git", arguments...)
+	command.Dir = directory
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", arguments, err, output)
+	}
+	return string(output)
 }

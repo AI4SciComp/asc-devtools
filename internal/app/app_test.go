@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AI4SciComp/asc-devtools/internal/config"
 	"github.com/AI4SciComp/asc-devtools/internal/process"
@@ -26,6 +27,7 @@ type appRunner struct {
 	calls    []process.Command
 	failName string
 	failCode int
+	root     string
 }
 
 func (r *appRunner) Run(_ context.Context, command process.Command) (process.Result, error) {
@@ -34,6 +36,8 @@ func (r *appRunner) Run(_ context.Context, command process.Command) (process.Res
 	switch {
 	case strings.Contains(joined, "rev-parse --is-inside-work-tree"):
 		return process.Result{Stdout: "true\n"}, nil
+	case strings.Contains(joined, "rev-parse --show-toplevel") && r.root != "":
+		return process.Result{Stdout: r.root + "\n"}, nil
 	case strings.Contains(joined, "status --porcelain=v2"):
 		return process.Result{Stdout: "# branch.head main\n# branch.upstream origin/main\n# branch.ab +1 -2\n"}, nil
 	case strings.Contains(joined, "status --porcelain"):
@@ -106,7 +110,7 @@ func apiClient(body string, status int) *http.Client {
 
 func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 	code, stdout, stderr := runApp(t, []string{"--help"}, nil, nil, nil)
-	if code != ExitSuccess || !strings.Contains(stdout, "repo clone") || strings.Contains(stdout, "repo save") || strings.Contains(stdout, "\n  update ") || stderr != "" {
+	if code != ExitSuccess || !strings.Contains(stdout, "repo clone") || !strings.Contains(stdout, "repo save") || strings.Contains(stdout, "\n  update ") || stderr != "" {
 		t.Fatalf("help = %d, %q, %q", code, stdout, stderr)
 	}
 	code, stdout, stderr = runApp(t, []string{"--version"}, nil, nil, nil)
@@ -126,13 +130,29 @@ func TestHelpVersionAndInvalidInvocation(t *testing.T) {
 		{"workflow"},
 		{"cmake"},
 		{"update"},
-		{"repo", "save"},
 		{"workspace", "init"},
 	} {
 		code, stdout, stderr = runApp(t, arguments, nil, nil, nil)
 		if code != ExitUsage || stdout != "" || !strings.Contains(stderr, "asc: error:") {
 			t.Fatalf("excluded command %v = %d, %q, %q", arguments, code, stdout, stderr)
 		}
+	}
+	code, stdout, stderr = runApp(t, []string{"repo", "save", "--help"}, nil, nil, nil)
+	if code != ExitSuccess || !strings.Contains(stdout, "--force") || stderr != "" {
+		t.Fatalf("repo save help = %d, %q, %q", code, stdout, stderr)
+	}
+	repository, message, dryRun, yes, force, err := parseRepoSave([]string{
+		"asc-one", "--message", "Save work", "--dry-run", "--yes", "--force",
+	})
+	if err != nil || repository != "asc-one" || message != "Save work" || !dryRun || !yes || !force {
+		t.Fatalf("parseRepoSave() = %q, %q, %v, %v, %v, %v", repository, message, dryRun, yes, force, err)
+	}
+	repository, message, dryRun, yes, force, err = parseRepoSave(nil)
+	if err != nil || repository != "" || dryRun || yes || force {
+		t.Fatalf("parseRepoSave(current) = %q, %q, %v, %v, %v, %v", repository, message, dryRun, yes, force, err)
+	}
+	if _, err := time.Parse("Updated at 2006-01-02 15:04:05", message); err != nil {
+		t.Fatalf("default save message = %q: %v", message, err)
 	}
 }
 
@@ -222,6 +242,49 @@ func TestRepositorySyncDryRunAndCMakeExitPropagation(t *testing.T) {
 	code, stdout, stderr = runApp(t, []string{"build", "asc-one", "--preset", "dev"}, map[string]string{"ASC_WORKSPACE": workspace}, runner, nil)
 	if code != 7 || stdout != "" || !strings.Contains(stderr, "command failed (7)") {
 		t.Fatalf("build failure = %d, %q, %q", code, stdout, stderr)
+	}
+}
+
+func TestRepositorySaveDryRunRoutesForce(t *testing.T) {
+	workspace := t.TempDir()
+	repository := filepath.Join(workspace, "asc-one")
+	if err := os.Mkdir(repository, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &appRunner{}
+	code, stdout, stderr := runApp(t, []string{
+		"repo", "save", "asc-one", "--message", "Save work", "--force", "--dry-run",
+	}, map[string]string{"ASC_WORKSPACE": workspace}, runner, nil)
+	if code != ExitSuccess || stderr != "" || !strings.Contains(stdout, "remote history will be overwritten") ||
+		!strings.Contains(stdout, "push --force -- origin HEAD:refs/heads/main") {
+		t.Fatalf("save dry run = %d, %q, %q", code, stdout, stderr)
+	}
+	for _, call := range runner.calls {
+		if strings.Contains(strings.Join(call.Args, " "), " push ") {
+			t.Fatalf("dry run pushed: %+v", call)
+		}
+	}
+}
+
+func TestRepositorySaveDefaultsToCurrentRepository(t *testing.T) {
+	workspace := t.TempDir()
+	repository := filepath.Join(workspace, "asc-one")
+	current := filepath.Join(repository, "nested")
+	if err := os.MkdirAll(current, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	runner := &appRunner{root: repository}
+	code := Run(context.Background(), []string{"repo", "save", "--dry-run"}, Dependencies{
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Config: appLoader(t, map[string]string{"ASC_WORKSPACE": workspace}),
+		Runner: runner,
+		Getwd:  func() (string, error) { return current, nil },
+		Stdin:  strings.NewReader(""),
+	})
+	if code != ExitSuccess || stderr.String() != "" || !strings.Contains(stdout.String(), "asc-one: planned") {
+		t.Fatalf("current save dry run = %d, %q, %q", code, stdout.String(), stderr.String())
 	}
 }
 

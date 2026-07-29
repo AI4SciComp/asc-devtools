@@ -4,8 +4,10 @@ package git
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,7 +24,7 @@ type Manager struct {
 	Config config.Config
 }
 
-// Operation describes one clone or synchronization outcome.
+// Operation describes one clone, synchronization, or save outcome.
 type Operation struct {
 	Name    string   `json:"name"`
 	Outcome string   `json:"outcome"`
@@ -41,6 +43,18 @@ type Status struct {
 	Clean    bool   `json:"clean"`
 	Changes  int    `json:"changes"`
 	Error    string `json:"error,omitempty"`
+}
+
+// SavePlan is an immutable, reviewable plan for committing and pushing one repository.
+type SavePlan struct {
+	Operation Operation `json:"operation"`
+	Branch    string    `json:"branch"`
+	Upstream  string    `json:"upstream"`
+	Changes   int       `json:"changes"`
+	Message   string    `json:"message"`
+	Force     bool      `json:"force"`
+	path      string
+	status    string
 }
 
 type target struct {
@@ -297,6 +311,221 @@ func (m Manager) syncOne(ctx context.Context, repository target, dryRun bool) Op
 		operation.Outcome, operation.Detail = "updated", "downloaded a remote fast-forward"
 	}
 	return operation
+}
+
+// CurrentRepository returns the managed direct-child repository containing directory.
+func (m Manager) CurrentRepository(ctx context.Context, directory string) (string, error) {
+	if directory == "" {
+		return "", errors.New("resolve current repository: working directory is empty")
+	}
+	result, err := m.Runner.Run(ctx, process.Command{
+		Name: "git",
+		Args: []string{"-C", directory, "rev-parse", "--show-toplevel"},
+	})
+	if err != nil {
+		return "", fmt.Errorf("current directory is not in a Git working tree: %w", err)
+	}
+	root := filepath.Clean(strings.TrimSpace(result.Stdout))
+	if root == "." || !filepath.IsAbs(root) {
+		return "", fmt.Errorf("Git returned an invalid working-tree root: %q", strings.TrimSpace(result.Stdout))
+	}
+	relative, err := filepath.Rel(m.Config.Workspace, root)
+	if err != nil {
+		return "", fmt.Errorf("resolve current repository relative to workspace: %w", err)
+	}
+	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) ||
+		strings.Contains(relative, string(filepath.Separator)) {
+		return "", errors.New("current Git working tree is not a direct child of the asc workspace")
+	}
+	if err := config.ValidateRepositoryName(relative, m.Config); err != nil {
+		return "", err
+	}
+	expected, err := workspace.DirectChild(m.Config.Workspace, relative)
+	if err != nil {
+		return "", err
+	}
+	if filepath.Clean(expected) != root || !workspace.IsGitWorktree(ctx, m.Runner, expected) {
+		return "", errors.New("current Git working tree is not a safe managed repository")
+	}
+	return relative, nil
+}
+
+// PlanSave prepares a local-only commit-and-push plan for exactly one repository.
+func (m Manager) PlanSave(ctx context.Context, name, message string, force bool) (SavePlan, error) {
+	message = strings.TrimSpace(message)
+	if message == "" || len(message) > 500 || strings.ContainsAny(message, "\x00\r\n") {
+		return SavePlan{}, errors.New("commit message must be 1-500 characters on one line")
+	}
+	targets := m.targets(ctx, []string{name})
+	if len(targets) != 1 || targets[0].err != nil {
+		if len(targets) == 1 {
+			return SavePlan{}, targets[0].err
+		}
+		return SavePlan{}, errors.New("save requires one repository")
+	}
+	repository := targets[0]
+	statusOutput, err := m.run(ctx, repository.path, "status", "--porcelain=v2", "--branch")
+	if err != nil {
+		return SavePlan{}, err
+	}
+	status, err := ParseStatus(name, statusOutput)
+	if err != nil {
+		return SavePlan{}, err
+	}
+	if status.Detached || status.Branch == "" {
+		return SavePlan{}, errors.New("detached HEAD cannot be saved safely")
+	}
+	if status.Upstream == "" {
+		return SavePlan{}, fmt.Errorf("branch %s has no upstream", status.Branch)
+	}
+	remotePrefix := m.Config.Remote + "/"
+	if !strings.HasPrefix(status.Upstream, remotePrefix) || strings.TrimPrefix(status.Upstream, remotePrefix) == "" {
+		return SavePlan{}, fmt.Errorf("upstream does not use configured remote: %s", status.Upstream)
+	}
+	for _, line := range strings.Split(statusOutput, "\n") {
+		if strings.HasPrefix(line, "u ") {
+			return SavePlan{}, errors.New("repository has unresolved merge conflicts")
+		}
+	}
+	fetch := process.Command{Name: "git", Args: []string{"-C", repository.path, "fetch", "--", m.Config.Remote}}
+	add := process.Command{Name: "git", Args: []string{"-C", repository.path, "add", "--all", "--"}}
+	commit := process.Command{Name: "git", Args: []string{"-C", repository.path, "commit", "-m", message}}
+	remoteBranch := strings.TrimPrefix(status.Upstream, remotePrefix)
+	pushArguments := []string{"-C", repository.path, "push"}
+	if force {
+		pushArguments = append(pushArguments, "--force")
+	}
+	pushArguments = append(pushArguments, "--", m.Config.Remote, "HEAD:refs/heads/"+remoteBranch)
+	push := process.Command{Name: "git", Args: pushArguments}
+	commands := []string{process.Describe(fetch)}
+	if !status.Clean {
+		commands = append(commands, process.Describe(add), process.Describe(commit))
+	}
+	commands = append(commands, process.Describe(push))
+	detail := fmt.Sprintf("%d working-tree changes on %s tracking %s", status.Changes, status.Branch, status.Upstream)
+	if force {
+		detail += " (remote history will be overwritten)"
+	}
+	return SavePlan{
+		Operation: Operation{Name: name, Outcome: "planned", Detail: detail, Plan: commands},
+		Branch:    status.Branch,
+		Upstream:  status.Upstream,
+		Changes:   status.Changes,
+		Message:   message,
+		Force:     force,
+		path:      repository.path,
+		status:    statusOutput,
+	}, nil
+}
+
+// ApplySave verifies and executes a previously reviewed save plan.
+func (m Manager) ApplySave(ctx context.Context, plan SavePlan) Operation {
+	operation := Operation{Name: plan.Operation.Name}
+	currentStatus, err := m.run(ctx, plan.path, "status", "--porcelain=v2", "--branch")
+	if err != nil {
+		operation.Outcome, operation.Detail = "failed", err.Error()
+		return operation
+	}
+	if currentStatus != plan.status {
+		operation.Outcome, operation.Detail = "failed", "repository changed after the save plan was reviewed"
+		return operation
+	}
+	if _, err := m.Runner.Run(ctx, process.Command{
+		Name: "git", Args: []string{"-C", plan.path, "fetch", "--", m.Config.Remote}, Stream: true,
+	}); err != nil {
+		operation.Outcome, operation.Detail = "failed", "fetch failed: "+err.Error()
+		return operation
+	}
+	counts, err := m.run(ctx, plan.path, "rev-list", "--left-right", "--count", "HEAD..."+plan.Upstream)
+	if err != nil {
+		operation.Outcome, operation.Detail = "failed", "compare upstream: "+err.Error()
+		return operation
+	}
+	ahead, behind, err := parseAheadBehind(counts)
+	if err != nil {
+		operation.Outcome, operation.Detail = "failed", err.Error()
+		return operation
+	}
+	if behind > 0 && !plan.Force {
+		operation.Outcome = "skipped"
+		if ahead > 0 {
+			operation.Detail = "local and remote histories diverged; use --force to overwrite the remote or resolve manually"
+		} else if plan.Changes > 0 {
+			operation.Detail = "remote has new commits while local changes exist; use --force to overwrite the remote or reconcile manually"
+		} else {
+			operation.Detail = "remote has new commits; run asc repo sync first or use --force to overwrite the remote"
+		}
+		return operation
+	}
+	committed := false
+	if plan.Changes > 0 {
+		if _, err := m.Runner.Run(ctx, process.Command{
+			Name: "git", Args: []string{"-C", plan.path, "add", "--all", "--"}, Stream: true,
+		}); err != nil {
+			operation.Outcome, operation.Detail = "failed", "stage failed: "+err.Error()
+			return operation
+		}
+		_, diffErr := m.Runner.Run(ctx, process.Command{
+			Name: "git", Args: []string{"-C", plan.path, "diff", "--cached", "--quiet", "--exit-code"},
+		})
+		if diffErr != nil && process.ExitCode(diffErr, -1) != 1 {
+			operation.Outcome, operation.Detail = "failed", "inspect staged changes: "+diffErr.Error()
+			return operation
+		}
+		if process.ExitCode(diffErr, 0) == 1 {
+			if _, err := m.Runner.Run(ctx, process.Command{
+				Name: "git", Args: []string{"-C", plan.path, "commit", "-m", plan.Message}, Stream: true,
+			}); err != nil {
+				operation.Outcome, operation.Detail = "failed", "commit failed: "+err.Error()
+				return operation
+			}
+			committed = true
+		}
+	}
+	if ahead == 0 && behind == 0 && !committed {
+		operation.Outcome, operation.Detail = "unchanged", "nothing to commit or push"
+		return operation
+	}
+	remoteBranch := strings.TrimPrefix(plan.Upstream, m.Config.Remote+"/")
+	pushArguments := []string{"-C", plan.path, "push"}
+	if plan.Force {
+		pushArguments = append(pushArguments, "--force")
+	}
+	pushArguments = append(pushArguments, "--", m.Config.Remote, "HEAD:refs/heads/"+remoteBranch)
+	if _, err := m.Runner.Run(ctx, process.Command{
+		Name: "git", Args: pushArguments, Stream: true,
+	}); err != nil {
+		operation.Outcome, operation.Detail = "failed", "push failed; local commit was preserved: "+err.Error()
+		return operation
+	}
+	operation.Outcome = "saved"
+	switch {
+	case plan.Force && committed:
+		operation.Detail = "committed and force-pushed to " + plan.Upstream
+	case plan.Force:
+		operation.Detail = "force-pushed local history to " + plan.Upstream
+	case committed:
+		operation.Detail = "committed and pushed to " + plan.Upstream
+	default:
+		operation.Detail = "pushed existing local commits to " + plan.Upstream
+	}
+	return operation
+}
+
+func parseAheadBehind(output string) (int, int, error) {
+	fields := strings.Fields(output)
+	if len(fields) != 2 {
+		return 0, 0, fmt.Errorf("parse upstream comparison %q", strings.TrimSpace(output))
+	}
+	ahead, err := strconv.Atoi(fields[0])
+	if err != nil || ahead < 0 {
+		return 0, 0, fmt.Errorf("parse local ahead count %q", fields[0])
+	}
+	behind, err := strconv.Atoi(fields[1])
+	if err != nil || behind < 0 {
+		return 0, 0, fmt.Errorf("parse remote ahead count %q", fields[1])
+	}
+	return ahead, behind, nil
 }
 
 func (m Manager) run(ctx context.Context, path string, arguments ...string) (string, error) {

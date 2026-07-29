@@ -172,6 +172,45 @@ Outcomes are `planned`, `updated`, `unchanged`, `skipped`, and `failed`.
 `skipped` or `failed` makes the overall command return `1` after all independent
 repositories are processed.
 
+## `asc repo save [REPOSITORY] [--message TEXT] [--dry-run] [--yes] [--force]`
+
+Save stages all changes, creates a commit when needed, and pushes the current
+branch to its configured upstream. When `REPOSITORY` is omitted, the Git
+worktree containing the current directory must be a managed direct child of the
+configured workspace. An explicit repository name selects that managed
+worktree instead.
+
+The default commit message is `Updated at YYYY-MM-DD HH:MM:SS` in local time.
+`--message` accepts a nonempty, single-line message of at most 500 characters.
+The branch must be attached and track a branch on the configured remote;
+unresolved conflicts are refused.
+
+Save first creates a local-only plan containing the applicable commands:
+
+```text
+git -C PATH fetch -- REMOTE
+git -C PATH add --all --
+git -C PATH commit -m MESSAGE
+git -C PATH push -- REMOTE HEAD:refs/heads/BRANCH
+```
+
+`--dry-run` prints the plan without fetching, staging, committing, or pushing.
+A real save prints the plan to stderr and asks for confirmation unless `--yes`
+is present. After confirmation it rechecks the working-tree snapshot, fetches,
+and refuses remote-ahead or diverged history before staging local changes.
+
+`--force` explicitly selects the destructive override path. It changes the
+final command to:
+
+```text
+git -C PATH push --force -- REMOTE HEAD:refs/heads/BRANCH
+```
+
+With this option, remote-ahead and diverged history do not block the save; the
+local branch replaces the tracked remote branch. Detached branches, missing or
+wrong-remote upstreams, conflicts, fetch failures, and commit failures remain
+blocked. Outcomes are `saved`, `unchanged`, `skipped`, and `failed`.
+
 ## `asc configure REPOSITORY --preset PRESET`
 
 Validates a direct-child Git worktree, a preset file, and `CMakeLists.txt`.

@@ -25,8 +25,9 @@ by their wrappers.
   status errors.
 - `internal/workspace` proves direct-child containment, rejects repository
   symlinks, and discovers only immediate managed Git worktrees.
-- `internal/git` plans and applies safe clone, parses porcelain-v2 status, and
-  performs download-only synchronization through fetch plus `merge --ff-only`.
+- `internal/git` plans and applies safe clone, parses porcelain-v2 status,
+  performs download-only synchronization through fetch plus `merge --ff-only`,
+  and implements the reviewed commit-and-push save workflow.
 - `internal/cmake` validates a direct-child repository and explicit preset, asks
   CMake/CTest to list the relevant preset class, and streams the requested tool
   from the repository root.
@@ -47,7 +48,8 @@ Domain packages do not import CLI presentation.
 
 `workspace` and `completion` require no external command. `repo status` uses
 only local Git. `repo list` and clone discovery use REST. Doctor intentionally
-uses REST and a bounded SSH probe. Real sync uses Git network transport.
+uses REST and a bounded SSH probe. Real sync and real save use Git network
+transport.
 
 ## Configuration and identity
 
@@ -96,9 +98,22 @@ git -C PATH merge --ff-only UPSTREAM
 Real sync executes those exact operations. A dirty, detached, no-upstream,
 wrong-remote, or non-fast-forward repository is left for manual resolution.
 
-There is no code path for reset, clean, stash, checkout, rebase, commit, push,
-force, branch deletion, conflict resolution, release publication, or pull
-request creation.
+Save resolves one managed direct-child repository, using the current worktree
+when no name is supplied. It validates the attached branch, configured-remote
+upstream, and conflict-free porcelain snapshot. After plan review, it verifies
+that snapshot again, fetches, compares local and upstream histories, stages all
+changes, commits when needed, and pushes the explicit tracked branch ref.
+Remote-ahead and diverged histories are refused by default.
+
+`--force` is carried in the immutable save plan and adds `--force` to the push.
+It deliberately permits the local branch to replace remote-ahead or diverged
+history. The flag does not bypass worktree containment, attached-branch,
+upstream, conflict, fetch, staging, or commit validation.
+
+There is no code path for reset, clean, stash, checkout, rebase, branch
+deletion, conflict resolution, release publication, or pull request creation.
+Commit, push, and force behavior is isolated to the explicit `repo save`
+workflow.
 
 ## REST safety
 

@@ -5,9 +5,10 @@ library. Do not add third-party module requirements or move application logic
 into shell.
 
 Keep the canonical v0.1 surface limited to doctor, workspace, repository
-list/clone/status/sync, top-level configure/build/test, and Bash completion.
-Do not add commands that reset, clean, stash, check out, rebase, commit, push,
-delete branches, force updates, publish releases, or open pull requests.
+list/clone/status/sync/save, top-level configure/build/test, and Bash completion.
+Do not add commands that reset, clean, stash, check out, rebase, delete branches,
+publish releases, or open pull requests. Commit, push, and force behavior must
+remain isolated to the explicit, reviewed `repo save` workflow.
 
 Run:
 
@@ -33,7 +34,8 @@ Git identities.
 
 Preserve argument-slice process execution, direct-child containment, token
 redaction, bounded HTTP reads and pagination, clone non-overwrite behavior, and
-fast-forward-only sync. Update tests and user documentation with every behavior
-change.
+fast-forward-only sync. Preserve save's pre-commit fetch check and require an
+explicit `--force` for remote history replacement. Update tests and user
+documentation with every behavior change.
 
 Contributions are licensed under Apache-2.0.
