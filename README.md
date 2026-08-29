@@ -67,16 +67,23 @@ repositories:
 
 ```text
 ~/AI4SciComp/
+├── .github/
 ├── asc-devtools/
 ├── asc-cmake/
 ├── asc-cpp/
+├── asc-py/
+├── asc-os/
 ├── asc-xde/
 ├── asc-kinetic/
-├── asc-lean/
-└── asc-lab/
+└── asc-lean/
 ```
 
 The umbrella itself is not initialized as a Git repository by `asc`.
+Repository discovery remains dynamic; this diagram is not an allow-list.
+`asc-os` owns generic research state as a file/CLI sidecar and does not turn
+`asc-devtools` into an agent runtime. The future neural-operator repository
+`asc-no` is planned, not implemented or cloned, and will build on released
+public APIs from `asc-py` without an `asc-os` runtime dependency.
 
 ## Configuration
 

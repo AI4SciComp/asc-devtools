@@ -31,19 +31,28 @@ Git repository. Each child remains an independent checkout:
 ```text
 ~/AI4SciComp/
 ├── workspace/       # optional coordination data, not managed by asc v0.1
+├── .github/
 ├── asc-devtools/
 ├── asc-cmake/
 ├── asc-cpp/
+├── asc-py/
+├── asc-os/
 ├── asc-xde/
 ├── asc-kinetic/
-├── asc-lean/
-└── asc-lab/
+└── asc-lean/
 ```
 
 Repository discovery is dynamic. The names above describe the current
 organization layout; `repo list` uses the API rather than a hard-coded list.
-The retired provisional names `asc-pde` and `asc-platform` are not part of the
-current layout.
+The diagram is not an allow-list and private repositories appear only when the
+caller is authorized to discover them.
+
+`asc-os` is the generic research-state sidecar. It owns bounded contexts,
+evidence, lifecycle records, deterministic restriction and gluing, a CLI, and
+local stdio MCP; `asc-devtools` does not consume its schemas or become an agent
+runtime. The future `asc-no` repository is planned but not implemented. It will
+own neural-operator models, training, evaluation, and benchmarks on released
+public `asc-py` APIs, and it will not import `asc-os` at runtime.
 
 Repository operations are limited to direct children such as
 `~/AI4SciComp/asc-cpp`. `asc` does not recursively scan nested directories and
