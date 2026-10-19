@@ -23,6 +23,15 @@ or invoked at runtime.
 
 ## Install on Ubuntu or WSL2
 
+For installation without cloning or compiling, use the `.deb` package or
+binary archive from [GitHub Releases](https://github.com/AI4SciComp/asc-devtools/releases)
+once a release has been published. Go developers can also use
+`go install github.com/AI4SciComp/asc-devtools/cmd/asc@latest`.
+See [installation](docs/installation.md#install-without-a-source-checkout)
+for checksums, migration from a local install, upgrades and removal.
+
+The source build remains available:
+
 Build and install under the default `/usr/local` prefix:
 
 ```bash

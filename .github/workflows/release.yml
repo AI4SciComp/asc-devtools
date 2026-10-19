@@ -1,0 +1,50 @@
+name: Release
+on:
+  push:
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Install package test prerequisites
+        run: sudo apt-get update && sudo apt-get install -y fakeroot
+      - run: bash scripts/package.sh "${GITHUB_REF_NAME}"
+      - name: Verify packages
+        run: bash scripts/test_package.sh dist "${GITHUB_REF_NAME#v}"
+      - name: Test APT installation and removal
+        run: |
+          sudo apt-get install -y "./dist/asc-devtools_${GITHUB_REF_NAME#v}_amd64.deb"
+          test "$(command -v asc)" = /usr/bin/asc
+          asc --version
+          asc --help
+          sudo apt-get remove -y asc-devtools
+          test ! -e /usr/bin/asc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/*
+          if-no-files-found: error
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes

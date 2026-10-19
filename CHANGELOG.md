@@ -4,7 +4,13 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-19
+
 ### Added
+
+- Linux amd64/arm64 binary archives, Debian packages and SHA-256 checksums,
+  with tag-triggered GitHub Releases and isolated package lifecycle tests.
+- Installation instructions for release packages and remote `go install`.
 
 - Dependency-free Go `asc` binary with strict JSON configuration and direct
   GitHub REST discovery.

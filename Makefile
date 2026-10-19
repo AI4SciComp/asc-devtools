@@ -56,6 +56,8 @@ help:
 	@echo "  make coverage               - Write coverage/coverage.out"
 	@echo "  make build                  - Build ./asc"
 	@echo "  make check                  - Run the complete local validation suite"
+	@echo "  make package                - Build Linux release archives and Debian packages"
+	@echo "  make package-test           - Build and test release packages without sudo"
 	@echo "  make clean                  - Remove generated local artifacts"
 	@echo
 	@echo "Installation:"
@@ -525,3 +527,13 @@ gh-run-watch: _check-gh
 		exit 1
 	fi
 	"$(GH)" run watch "$$RUN_ID" --exit-status
+
+.PHONY: package
+package:
+	@cd "$(ROOT_DIR)"
+	bash scripts/package.sh "$(VERSION)"
+
+.PHONY: package-test
+package-test: package
+	@cd "$(ROOT_DIR)"
+	bash scripts/test_package.sh dist "$(VERSION)"
