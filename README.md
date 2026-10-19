@@ -36,7 +36,7 @@ Build and install under the default `/usr/local` prefix:
 
 ```bash
 CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-  -ldflags "-s -w -X main.version=0.1.0" \
+  -ldflags "-s -w -X main.version=1.0.0" \
   -o ./asc ./cmd/asc
 sudo ./scripts/install.sh --binary ./asc
 asc --version

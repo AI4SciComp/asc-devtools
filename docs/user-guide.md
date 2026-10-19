@@ -1,6 +1,6 @@
 # asc-devtools user guide
 
-This guide describes the complete v0.1 `asc` command surface as implemented.
+This guide describes the complete v1.0 `asc` command surface as implemented.
 Run `asc --help` for the concise built-in reference.
 
 ## What asc-devtools is
@@ -30,7 +30,7 @@ Git repository. Each child remains an independent checkout:
 
 ```text
 ~/AI4SciComp/
-├── workspace/       # optional coordination data, not managed by asc v0.1
+├── workspace/       # optional coordination data, not managed by asc v1.0
 ├── .github/
 ├── asc-devtools/
 ├── asc-cmake/
@@ -108,7 +108,7 @@ Build and install:
 
 ```bash
 CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-  -ldflags "-s -w -X main.version=0.1.0" \
+  -ldflags "-s -w -X main.version=1.0.0" \
   -o ./asc ./cmd/asc
 sudo ./scripts/install.sh --binary ./asc
 asc --version
@@ -474,7 +474,7 @@ asc completion bash
 source <(asc completion bash)
 ```
 
-Only Bash completion is supported in v0.1.
+Only Bash completion is supported in v1.0.
 
 ## Normal daily workflow
 
@@ -762,7 +762,7 @@ sudo ./scripts/install.sh --binary ./asc
 ```
 
 The installer checks the existing manifest and hashes before replacement.
-There is no v0.1 self-update command.
+There is no v1.0 self-update command.
 
 Uninstall the default managed files:
 

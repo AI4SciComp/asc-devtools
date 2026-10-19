@@ -4,7 +4,7 @@ The active implementation requires Go 1.25 or newer and uses only the standard
 library. Do not add third-party module requirements or move application logic
 into shell.
 
-Keep the canonical v0.1 surface limited to doctor, workspace, repository
+Keep the canonical v1.0 surface limited to doctor, workspace, repository
 list/clone/status/sync/save, top-level configure/build/test, and Bash completion.
 Do not add commands that reset, clean, stash, check out, rebase, delete branches,
 publish releases, or open pull requests. Commit, push, and force behavior must

@@ -40,7 +40,7 @@ jobs:
       - name: Static build and smoke tests
         run: |
           CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-            -ldflags "-s -w -X main.version=0.1.0" \
+            -ldflags "-s -w -X main.version=1.0.0" \
             -o /tmp/asc ./cmd/asc
           /tmp/asc --version
           /tmp/asc --help
@@ -51,12 +51,12 @@ jobs:
       - name: Build and test release packages
         if: matrix.go-version == '1.25.x'
         run: |
-          bash scripts/package.sh 0.1.0
-          bash scripts/test_package.sh dist 0.1.0
+          bash scripts/package.sh 1.0.0
+          bash scripts/test_package.sh dist 1.0.0
       - name: Test APT installation and removal
         if: matrix.go-version == '1.25.x'
         run: |
-          sudo apt-get install -y ./dist/asc-devtools_0.1.0_amd64.deb
+          sudo apt-get install -y ./dist/asc-devtools_1.0.0_amd64.deb
           test "$(command -v asc)" = /usr/bin/asc
           asc --version
           asc --help

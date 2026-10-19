@@ -4,7 +4,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-19
+## [1.0.0] - 2026-10-19
 
 ### Added
 
@@ -28,7 +28,7 @@ This project follows Keep a Changelog and Semantic Versioning.
 
 - Promoted the dependency-free Go implementation to the canonical repository
   root.
-- Consolidated the public CLI on the documented v0.1 command surface.
+- Consolidated the public CLI on the documented v1.0 command surface.
 - Changed the built-in workspace from `~/projects/AI4SciComp` to
   `~/AI4SciComp`.
 - Replaced legacy Python and Bash implementation snapshots with a verified

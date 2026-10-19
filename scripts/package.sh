@@ -3,7 +3,7 @@
 set -euo pipefail
 version="${1:?Usage: scripts/package.sh VERSION [OUTPUT_DIRECTORY]}"
 version="${version#v}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Expected a stable version such as 0.1.0' >&2; exit 1; }
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Expected a stable version such as 1.0.0' >&2; exit 1; }
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 output="${2:-$root/dist}"

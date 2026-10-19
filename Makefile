@@ -22,7 +22,7 @@ GIT ?= git
 GH ?= gh
 ASC ?= asc
 
-VERSION ?= 0.1.0
+VERSION ?= 1.0.0
 REMOTE ?= origin
 BASE_BRANCH ?= main
 USER_PREFIX ?= $(HOME)/.local

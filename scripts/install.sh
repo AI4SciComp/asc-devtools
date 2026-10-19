@@ -144,7 +144,7 @@ if [[ -z "${binary}" ]]; then
 		fail "Go is required when --binary is not supplied; pass --go PATH if sudo hides it"
 	temporary_binary=$(mktemp "${TMPDIR:-/tmp}/asc-build.XXXXXXXX")
 	(cd -- "${project_root}" && CGO_ENABLED=0 "${go_binary}" build -buildvcs=false -trimpath \
-		-ldflags "-s -w -X main.version=0.1.0" -o "${temporary_binary}" ./cmd/asc)
+		-ldflags "-s -w -X main.version=1.0.0" -o "${temporary_binary}" ./cmd/asc)
 	binary="${temporary_binary}"
 fi
 [[ -f "${binary}" && ! -L "${binary}" && -x "${binary}" ]] ||

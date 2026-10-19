@@ -35,7 +35,7 @@ From the repository root:
 
 ```bash
 CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-  -ldflags "-s -w -X main.version=0.1.0" \
+  -ldflags "-s -w -X main.version=1.0.0" \
   -o ./asc ./cmd/asc
 ./asc --version
 ```
@@ -130,7 +130,7 @@ sudo ./scripts/install.sh --binary ./asc
 ```
 
 The old binary and completion must still match their manifest hashes. There is
-no network self-update command in v0.1.
+no network self-update command in v1.0.
 
 ## Uninstall
 
@@ -167,18 +167,18 @@ Git transport credentials.
 ## Install without a source checkout
 
 The release workflow builds Linux amd64 and arm64 artifacts when a stable tag
-such as `v0.1.0` is pushed. It publishes a GitHub Release only after package tests and APT installation
+such as `v1.0.0` is pushed. It publishes a GitHub Release only after package tests and APT installation
 checks pass.
 
 Download the matching `.deb` and `SHA256SUMS` from
 [GitHub Releases](https://github.com/AI4SciComp/asc-devtools/releases).
 For Ubuntu/WSL2, `dpkg --print-architecture` reports `amd64` or `arm64`.
-For example, after downloading the amd64 package for version 0.1.0:
+For example, after downloading the amd64 package for version 1.0.0:
 
 ```bash
 # Verify the downloaded package against the release checksum file.
-grep '  asc-devtools_0.1.0_amd64.deb$' SHA256SUMS | sha256sum -c -
-sudo apt install ./asc-devtools_0.1.0_amd64.deb
+grep '  asc-devtools_1.0.0_amd64.deb$' SHA256SUMS | sha256sum -c -
+sudo apt install ./asc-devtools_1.0.0_amd64.deb
 asc --version
 ```
 
@@ -198,12 +198,12 @@ with `sudo apt remove asc-devtools`. No project APT repository is provided yet,
 so `apt upgrade` alone cannot discover new asc-devtools releases.
 
 For an installation without sudo, download the matching
-`asc-devtools_0.1.0_linux_amd64.tar.gz` (or arm64) and verify its checksum:
+`asc-devtools_1.0.0_linux_amd64.tar.gz` (or arm64) and verify its checksum:
 
 ```bash
-grep '  asc-devtools_0.1.0_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c -
-tar -xzf asc-devtools_0.1.0_linux_amd64.tar.gz
-cd asc-devtools_0.1.0_linux_amd64
+grep '  asc-devtools_1.0.0_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c -
+tar -xzf asc-devtools_1.0.0_linux_amd64.tar.gz
+cd asc-devtools_1.0.0_linux_amd64
 bash scripts/install.sh --binary ./asc --prefix "$HOME/.local"
 ```
 
@@ -218,7 +218,7 @@ With Go 1.25 or newer and repository access, no manual clone is needed:
 go install github.com/AI4SciComp/asc-devtools/cmd/asc@latest
 ```
 
-Once a stable release is tagged, pin it with `@v0.1.0` instead of `@latest`.
+Once a stable release is tagged, pin it with `@v1.0.0` instead of `@latest`.
 The executable goes into `GOBIN`, or normally `~/go/bin`; add that directory to
 PATH. Go installation does not install Bash completion or an uninstall manifest.
 Enable completion with `source <(asc completion bash)` and remove the executable
@@ -230,8 +230,8 @@ CLI reports version `dev`.
 On Linux with Go, Git, Bash, GNU tar/coreutils, `dpkg-deb` and `fakeroot` installed:
 
 ```bash
-bash scripts/package.sh 0.1.0
-bash scripts/test_package.sh dist 0.1.0
+bash scripts/package.sh 1.0.0
+bash scripts/test_package.sh dist 1.0.0
 ```
 
 This builds both architectures, includes the version and source commit in each
