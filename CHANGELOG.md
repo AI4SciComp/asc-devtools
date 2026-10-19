@@ -2,8 +2,6 @@
 
 This project follows Keep a Changelog and Semantic Versioning.
 
-## [Unreleased]
-
 ## [1.0.0] - 2026-10-19
 
 ### Added
@@ -11,7 +9,6 @@ This project follows Keep a Changelog and Semantic Versioning.
 - Linux amd64/arm64 binary archives, Debian packages and SHA-256 checksums,
   with tag-triggered GitHub Releases and isolated package lifecycle tests.
 - Installation instructions for release packages and remote `go install`.
-
 - Dependency-free Go `asc` binary with strict JSON configuration and direct
   GitHub REST discovery.
 - Safe repository clone, porcelain-v2 status, dry-run and fast-forward-only
@@ -23,17 +20,6 @@ This project follows Keep a Changelog and Semantic Versioning.
 - Explicit `repo save --branch BRANCH` destination selection on the configured
   remote, including new remote branches and local branches without an upstream.
 - Standard-library tests, static builds, and Go 1.25/1.26 CI.
-
-### Changed
-
-- Promoted the dependency-free Go implementation to the canonical repository
-  root.
-- Consolidated the public CLI on the documented v1.0 command surface.
-- Changed the built-in workspace from `~/projects/AI4SciComp` to
-  `~/AI4SciComp`.
-- Replaced legacy Python and Bash implementation snapshots with a verified
-  migration ledger and preserved history.
-- Added a comprehensive implementation-derived user guide.
 
 ### Security
 

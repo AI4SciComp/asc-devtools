@@ -13,18 +13,9 @@ remain isolated to the explicit, reviewed `repo save` workflow.
 Run:
 
 ```bash
-gofmt -w ./cmd ./internal
-go mod tidy
-test ! -e go.sum
-! grep -q '^require' go.mod
-go vet ./...
-go test ./...
-go test -race ./...
-CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
-/tmp/asc --help
-/tmp/asc --version
-scripts/test_install.sh /tmp/asc
-git diff --check
+make check
+# For distribution changes (Linux; requires dpkg-deb and fakeroot):
+make package-test
 ```
 
 Tests must remain offline and independent of live GitHub, user tokens, SSH keys,

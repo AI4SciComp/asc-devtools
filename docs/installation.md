@@ -1,8 +1,12 @@
 # Installation
 
-## Windows 11 and WSL2 Ubuntu
+The current release is [v1.0.0](https://github.com/AI4SciComp/asc-devtools/releases/tag/v1.0.0).
+Prebuilt packages support Linux amd64 and arm64, including Ubuntu in WSL2.
+Go is required only for source builds and `go install`.
 
-Install WSL2 from an elevated PowerShell prompt if needed:
+## Ubuntu and WSL2: Debian package
+
+In Windows, set up WSL2 from an elevated PowerShell prompt if needed:
 
 ```powershell
 wsl --install -d Ubuntu
@@ -10,148 +14,147 @@ wsl --update
 wsl --set-default-version 2
 ```
 
-Keep the checkout under the WSL filesystem, such as
-`~/AI4SciComp/asc-devtools`, rather than `/mnt/c`.
-
-Inside Ubuntu, install Git and build prerequisites:
+Run the following in Ubuntu. `dpkg --print-architecture` must report `amd64`
+or `arm64`:
 
 ```bash
-sudo apt update
-sudo apt install -y build-essential ca-certificates git
+arch=$(dpkg --print-architecture)
+base=https://github.com/AI4SciComp/asc-devtools/releases/download/v1.0.0
+curl -fLO "$base/asc-devtools_1.0.0_${arch}.deb"
+curl -fLO "$base/SHA256SUMS"
+grep "  asc-devtools_1.0.0_${arch}.deb\$" SHA256SUMS | sha256sum -c -
+sudo apt install "./asc-devtools_1.0.0_${arch}.deb"
+asc --version
 ```
 
-CMake and CTest are needed only for their wrapper commands:
+You can also download the package and `SHA256SUMS` through the release page.
+Checksums detect corruption; obtain both files from the trusted project release.
+
+APT installs Git and CA certificates. The package owns:
+
+```text
+/usr/bin/asc
+/usr/share/bash-completion/completions/asc
+/usr/share/doc/asc-devtools/copyright
+```
+
+CMake and CTest are needed only for `configure`, `build`, and `test`:
 
 ```bash
-sudo apt install -y cmake
+sudo apt install cmake
 ```
 
-Install a supported Go 1.25 or 1.26 toolchain from the official Go distribution
-when building from source. A released `asc` binary does not need Go.
+To upgrade, download and verify the newer `.deb`, then install it with
+`sudo apt install ./PACKAGE.deb`. There is no project APT software source, so
+`apt upgrade` alone cannot discover new asc-devtools releases.
+
+Remove the package with:
+
+```bash
+sudo apt remove asc-devtools
+```
+
+## Binary archive: installation without sudo
+
+Download the archive matching the Ubuntu/Debian architecture:
+
+```bash
+arch=$(dpkg --print-architecture)
+base=https://github.com/AI4SciComp/asc-devtools/releases/download/v1.0.0
+curl -fLO "$base/asc-devtools_1.0.0_linux_${arch}.tar.gz"
+curl -fLO "$base/SHA256SUMS"
+grep "  asc-devtools_1.0.0_linux_${arch}.tar.gz\$" SHA256SUMS | sha256sum -c -
+tar -xzf "asc-devtools_1.0.0_linux_${arch}.tar.gz"
+cd "asc-devtools_1.0.0_linux_${arch}"
+bash scripts/install.sh --binary ./asc --prefix "$HOME/.local"
+```
+
+On other Linux distributions, choose `amd64` for x86-64 or `arm64` for AArch64
+from the release page. The installer requires Bash and `sha256sum`.
+
+Ensure the installation directory is on PATH. Add this line to `~/.bashrc`
+for Bash, or `~/.zshrc` for Zsh, then start a new shell:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+The installer owns the binary, Bash completion and hash manifest under the
+selected prefix. It refuses to overwrite modified files or unrelated installs.
+Keep the included scripts for later upgrades and removal:
+
+```bash
+bash scripts/uninstall.sh --prefix "$HOME/.local"
+```
+
+Upgrade by downloading and verifying a newer archive, then running its installer
+with the same prefix. For a system installation, use
+`sudo bash scripts/install.sh --binary ./asc` (default prefix `/usr/local`)
+and `sudo bash scripts/uninstall.sh` to remove it.
+
+## Install with Go
+
+With Go 1.25 or newer, install a specific release without cloning:
+
+```bash
+go install github.com/AI4SciComp/asc-devtools/cmd/asc@v1.0.0
+```
+
+Use `@latest` to install the latest stable version. The executable goes into
+`GOBIN`, or normally `~/go/bin`; add that directory to PATH.
+
+Go installation does not install Bash completion or an uninstall manifest.
+Without release linker flags, the CLI reports version `dev`; prebuilt release
+binaries report `1.0.0` and their source commit. Remove the executable from the
+Go bin directory to uninstall.
 
 ## Build from source
 
-From the repository root:
+For development, install Git and Go 1.25 or newer, then clone the repository:
 
 ```bash
-CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-  -ldflags "-s -w -X main.version=1.0.0" \
-  -o ./asc ./cmd/asc
+git clone https://github.com/AI4SciComp/asc-devtools.git
+cd asc-devtools
+make build
 ./asc --version
 ```
 
-For a development build on the current Go path:
+`make install-user` installs under `~/.local`. `make install` uses sudo to
+install under `/usr/local`. Corresponding removal commands are
+`make uninstall-user` and `make uninstall`.
+
+The installer can also build directly, using `--go` if sudo hides Go from PATH:
 
 ```bash
-go install ./cmd/asc
-```
-
-That command installs to `GOBIN`, or normally `$(go env GOPATH)/bin`. A build
-without linker flags reports version `dev`.
-
-## Managed system installation
-
-```bash
-sudo ./scripts/install.sh --binary ./asc
-```
-
-The default `/usr/local` installation owns exactly:
-
-```text
-/usr/local/bin/asc
-/usr/local/share/bash-completion/completions/asc
-/usr/local/share/asc-devtools/install-manifest
-```
-
-The manifest records the prefix and SHA-256 hashes. A later install refuses to
-overwrite modified files or an installation without a valid manifest.
-
-The installer can also build from the checkout:
-
-```bash
-sudo ./scripts/install.sh
 sudo ./scripts/install.sh --go "$(command -v go)"
 ```
 
-The explicit `--go` form is useful when `sudo` has a restricted `PATH`.
+## Switch installation methods
 
-## User-local installation and PATH
-
-```bash
-./scripts/install.sh --binary ./asc --prefix "${HOME}/.local"
-```
-
-If needed, add this once to `~/.bashrc`:
+Check existing commands before switching:
 
 ```bash
-export PATH="${HOME}/.local/bin:${PATH}"
+type -a asc
 ```
 
-Then start a new shell or run:
+Remove a script installation using its original uninstaller and prefix before
+installing a `.deb`. An executable in `/usr/local/bin`, `~/.local/bin` or the
+Go bin directory may otherwise shadow `/usr/bin/asc`.
 
-```bash
-source ~/.bashrc
-```
+Remove Debian packages through APT. Use the supplied uninstaller only for
+script installations; it verifies manifest hashes before removing managed
+files. User configuration and workspaces remain in place.
 
-Completion is installed to
-`~/.local/share/bash-completion/completions/asc`. If the distribution does not
-load user completion automatically, use:
+## Bash completion and verification
+
+Debian packages and script installations include Bash completion. If your shell
+does not load it automatically, enable it in the current Bash session:
 
 ```bash
 source <(asc completion bash)
 ```
 
-## Custom prefix and package staging
-
-The prefix must be an absolute path other than `/`:
-
-```bash
-sudo ./scripts/install.sh --binary ./asc --prefix /opt/asc
-sudo ./scripts/uninstall.sh --prefix /opt/asc
-```
-
-Packagers can stage the same paths:
-
-```bash
-./scripts/install.sh --binary ./asc --destdir "${DESTDIR}"
-./scripts/uninstall.sh --destdir "${DESTDIR}"
-```
-
-`DESTDIR` changes only the staging root; the recorded prefix remains
-`/usr/local` unless `--prefix` is also supplied.
-
-## Upgrade
-
-Build or obtain the replacement binary, verify its provenance, and rerun the
-same installer with the same prefix:
-
-```bash
-sudo ./scripts/install.sh --binary ./asc
-```
-
-The old binary and completion must still match their manifest hashes. There is
-no network self-update command in v1.0.
-
-## Uninstall
-
-For the default prefix:
-
-```bash
-sudo ./scripts/uninstall.sh
-```
-
-For a user-local prefix:
-
-```bash
-./scripts/uninstall.sh --prefix "${HOME}/.local"
-```
-
-The uninstaller verifies hashes and removes only the binary, completion, and
-manifest named above. Missing managed files are tolerated. Modified files,
-symlinks, malformed manifests, and unrelated installations are refused. It
-never recursively deletes a prefix.
-
-## Verify
+Verify the selected installation:
 
 ```bash
 command -v asc
@@ -160,88 +163,27 @@ asc --help
 asc doctor
 ```
 
-Public REST discovery works without `gh` or a token. Private discovery needs a
-documented environment token; SSH or HTTPS cloning separately needs matching
-Git transport credentials.
+Public repository discovery needs no token. Private discovery requires
+`ASC_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`. SSH or HTTPS Git transport
+uses Git credentials independently; see [authentication](../README.md#authentication).
 
-## Install without a source checkout
+## Build and publish release artifacts
 
-The release workflow builds Linux amd64 and arm64 artifacts when a stable tag
-such as `v1.0.0` is pushed. It publishes a GitHub Release only after package tests and APT installation
-checks pass.
-
-Download the matching `.deb` and `SHA256SUMS` from
-[GitHub Releases](https://github.com/AI4SciComp/asc-devtools/releases).
-For Ubuntu/WSL2, `dpkg --print-architecture` reports `amd64` or `arm64`.
-For example, after downloading the amd64 package for version 1.0.0:
+On Linux, install Go, Git, Bash, GNU tar/coreutils, `dpkg-deb` and `fakeroot`:
 
 ```bash
-# Verify the downloaded package against the release checksum file.
-grep '  asc-devtools_1.0.0_amd64.deb$' SHA256SUMS | sha256sum -c -
-sudo apt install ./asc-devtools_1.0.0_amd64.deb
-asc --version
+make check
+make package-test
 ```
 
-Checksums detect corruption; obtain both files from the trusted project release.
-The package installs `/usr/bin/asc`, Bash completion under `/usr/share`, and
-license information under `/usr/share/doc/asc-devtools`. APT installs the Git
-and CA-certificate dependencies. CMake remains optional.
+`make package` builds Linux amd64 and arm64 `.tar.gz` and `.deb` files plus
+`SHA256SUMS` under `dist/`. Override the version with `VERSION=X.Y.Z`.
+Package tests use an isolated dpkg database and filesystem root; host packages
+are unchanged. CI separately exercises real APT installation and removal.
 
-Before switching from a script installation, remove it using its original
-uninstaller (`sudo ./scripts/uninstall.sh`, or add your original `--prefix`).
-An older `/usr/local/bin/asc` or `~/.local/bin/asc` may otherwise shadow
-`/usr/bin/asc`. Use `type -a asc` to inspect all versions on PATH. Never run the
-script uninstaller against a package-managed `/usr` installation.
-
-Upgrade by downloading and installing a newer `.deb` in the same way. Remove
-with `sudo apt remove asc-devtools`. No project APT repository is provided yet,
-so `apt upgrade` alone cannot discover new asc-devtools releases.
-
-For an installation without sudo, download the matching
-`asc-devtools_1.0.0_linux_amd64.tar.gz` (or arm64) and verify its checksum:
-
-```bash
-grep '  asc-devtools_1.0.0_linux_amd64.tar.gz$' SHA256SUMS | sha256sum -c -
-tar -xzf asc-devtools_1.0.0_linux_amd64.tar.gz
-cd asc-devtools_1.0.0_linux_amd64
-bash scripts/install.sh --binary ./asc --prefix "$HOME/.local"
-```
-
-Keep the included uninstaller for later removal. The archive installation does
-not require Go. Ensure `~/.local/bin` is on PATH as described above.
-
-## Install with Go
-
-With Go 1.25 or newer and repository access, no manual clone is needed:
-
-```bash
-go install github.com/AI4SciComp/asc-devtools/cmd/asc@latest
-```
-
-Once a stable release is tagged, pin it with `@v1.0.0` instead of `@latest`.
-The executable goes into `GOBIN`, or normally `~/go/bin`; add that directory to
-PATH. Go installation does not install Bash completion or an uninstall manifest.
-Enable completion with `source <(asc completion bash)` and remove the executable
-from the Go bin directory to uninstall. Without release linker flags the current
-CLI reports version `dev`.
-
-## Build and validate release artifacts
-
-On Linux with Go, Git, Bash, GNU tar/coreutils, `dpkg-deb` and `fakeroot` installed:
-
-```bash
-bash scripts/package.sh 1.0.0
-bash scripts/test_package.sh dist 1.0.0
-```
-
-This builds both architectures, includes the version and source commit in each
-binary, and writes `.tar.gz`, `.deb`, and `SHA256SUMS` files under `dist/`.
-The test uses an isolated dpkg database and filesystem root; it does not change
-the host installation. Dependency resolution is exercised separately by CI
-using APT. Set `SOURCE_DATE_EPOCH` to override the source commit timestamp used
-for archive and package metadata. Reproducibility requires the same source,
+Archive and package timestamps use the source commit time, or
+`SOURCE_DATE_EPOCH` when supplied. Reproducibility requires identical source,
 Go toolchain and packaging tools.
 
-Maintainers should run `make check` before tagging. Push a stable `vX.Y.Z` tag
-to trigger `.github/workflows/release.yml`, then verify the published
-release and its assets. This workflow does not configure an APT repository or publish to npm.
+The [release workflow](../.github/workflows/release.yml) publishes assets when
+a stable `vX.Y.Z` tag is pushed, after package and APT checks pass.

@@ -30,7 +30,6 @@ Git repository. Each child remains an independent checkout:
 
 ```text
 ~/AI4SciComp/
-├── workspace/       # optional coordination data, not managed by asc v1.0
 ├── .github/
 ├── asc-devtools/
 ├── asc-cmake/
@@ -46,13 +45,6 @@ Repository discovery is dynamic. The names above describe the current
 organization layout; `repo list` uses the API rather than a hard-coded list.
 The diagram is not an allow-list and private repositories appear only when the
 caller is authorized to discover them.
-
-`asc-os` is the generic research-state sidecar. It owns bounded contexts,
-evidence, lifecycle records, deterministic restriction and gluing, a CLI, and
-local stdio MCP; `asc-devtools` does not consume its schemas or become an agent
-runtime. The future `asc-no` repository is planned but not implemented. It will
-own neural-operator models, training, evaluation, and benchmarks on released
-public `asc-py` APIs, and it will not import `asc-os` at runtime.
 
 Repository operations are limited to direct children such as
 `~/AI4SciComp/asc-cpp`. `asc` does not recursively scan nested directories and
@@ -77,65 +69,17 @@ Build and installer:
 The `asc` binary contains no third-party Go module. Runtime users do not need
 Python, Node.js, Ruby, `jq`, a package manager, or GitHub CLI.
 
-## Installation on Windows 11 with WSL2 Ubuntu
+## Installation
 
-In an elevated PowerShell prompt:
+Install [v1.0.0](https://github.com/AI4SciComp/asc-devtools/releases/tag/v1.0.0)
+using the `.deb` package for Ubuntu or WSL2, or a binary archive for a user-local
+installation. Prebuilt releases support Linux amd64 and arm64 and require no
+Go toolchain or source checkout.
 
-```powershell
-wsl --install -d Ubuntu
-wsl --update
-wsl --set-default-version 2
-wsl --list --verbose
-```
-
-Restart Windows if requested. In Ubuntu:
-
-```bash
-sudo apt update
-sudo apt install -y build-essential ca-certificates git cmake
-```
-
-Store the workspace in the WSL filesystem:
-
-```bash
-mkdir -p "${HOME}/AI4SciComp"
-cd "${HOME}/AI4SciComp"
-git clone git@github.com:AI4SciComp/asc-devtools.git
-cd asc-devtools
-```
-
-Build and install:
-
-```bash
-CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-  -ldflags "-s -w -X main.version=1.0.0" \
-  -o ./asc ./cmd/asc
-sudo ./scripts/install.sh --binary ./asc
-asc --version
-```
-
-The default installation is:
-
-```text
-/usr/local/bin/asc
-/usr/local/share/bash-completion/completions/asc
-/usr/local/share/asc-devtools/install-manifest
-```
-
-For an unprivileged installation:
-
-```bash
-./scripts/install.sh --binary ./asc --prefix "${HOME}/.local"
-```
-
-Ensure the binary directory is on `PATH`:
-
-```bash
-export PATH="${HOME}/.local/bin:${PATH}"
-```
-
-Add that exact line to `~/.bashrc` if it should apply to future Bash sessions.
-The installer does not edit shell startup files.
+Follow the [installation guide](installation.md) for download and checksum
+commands, WSL2 setup, Go and source installation, PATH configuration, upgrades,
+and removal. The Debian package installs `/usr/bin/asc`; script installations
+use `/usr/local/bin/asc` or `~/.local/bin/asc` according to the selected prefix.
 
 ## Bash completion
 
@@ -754,37 +698,19 @@ credential contexts.
 
 ## Upgrade and uninstall
 
-Upgrade by obtaining/building a replacement and rerunning the installer with the
-same prefix:
+For a Debian package, download and verify the newer release, then run
+`sudo apt install ./PACKAGE.deb`. Remove it with `sudo apt remove asc-devtools`.
+There is no project APT software source; `apt upgrade` alone does not discover
+new releases.
 
-```bash
-sudo ./scripts/install.sh --binary ./asc
-```
+For a script installation, rerun the new archive's installer with the original
+prefix. Remove it with `bash scripts/uninstall.sh --prefix "$HOME/.local"`
+for a user-local install, or `sudo bash scripts/uninstall.sh` for `/usr/local`.
+The script verifies the installation manifest before replacing or removing files.
 
-The installer checks the existing manifest and hashes before replacement.
-There is no v1.0 self-update command.
-
-Uninstall the default managed files:
-
-```bash
-sudo ./scripts/uninstall.sh
-```
-
-Or a user-local install:
-
-```bash
-./scripts/uninstall.sh --prefix "${HOME}/.local"
-```
-
-The uninstaller targets only:
-
-```text
-PREFIX/bin/asc
-PREFIX/share/bash-completion/completions/asc
-PREFIX/share/asc-devtools/install-manifest
-```
-
-It verifies hashes and never recursively deletes `PREFIX`.
+For a Go installation, run `go install` with the desired version to upgrade,
+or remove `asc` from `GOBIN` (normally `~/go/bin`) to uninstall.
+See [installation](installation.md) for complete instructions.
 
 ## Contributor architecture
 
@@ -796,7 +722,7 @@ Domain packages are:
 - `github`: bounded REST discovery and filtering;
 - `process`: the only external-command boundary;
 - `workspace`: direct-child containment and local discovery;
-- `git`: clone, porcelain-v2 status, and fast-forward-only sync;
+- `git`: clone, porcelain-v2 status, fast-forward-only sync, and reviewed save;
 - `cmake`: configure/build/test preset wrappers;
 - `doctor`: structured read-only diagnostics;
 - `completion`: embedded Bash completion.
@@ -805,22 +731,15 @@ Tests use the standard `testing` package, `httptest.Server`, fake runners,
 `t.TempDir`, and temporary local/bare Git repositories. They do not need live
 GitHub, user tokens, SSH keys, global Git identity, or the user's home.
 
-Run the release-validation set:
+Run the validation commands:
 
 ```bash
-gofmt -w ./cmd ./internal
-go mod tidy
-test ! -e go.sum
-! grep -q '^require' go.mod
-go vet ./...
-go test ./...
-go test -race ./...
-CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
-/tmp/asc --help
-/tmp/asc --version
-scripts/test_install.sh /tmp/asc
-git diff --check
+make check
+# Linux distribution checks (requires dpkg-deb and fakeroot):
+make package-test
 ```
 
-CI repeats formatting, dependency, vet, test, race, static-build, smoke, and
-installer checks on supported Go 1.25 and 1.26 lines.
+CI tests Go 1.25 and 1.26, checks formatting and dependencies, and runs vet,
+unit tests, race tests, static-build smoke tests and installer checks. It also
+builds both Linux release architectures, tests the package lifecycle, and
+verifies real APT installation and removal.

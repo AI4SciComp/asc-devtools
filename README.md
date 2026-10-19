@@ -23,36 +23,32 @@ or invoked at runtime.
 
 ## Install on Ubuntu or WSL2
 
-For installation without cloning or compiling, use the `.deb` package or
-binary archive from [GitHub Releases](https://github.com/AI4SciComp/asc-devtools/releases)
-once a release has been published. Go developers can also use
-`go install github.com/AI4SciComp/asc-devtools/cmd/asc@latest`.
-See [installation](docs/installation.md#install-without-a-source-checkout)
-for checksums, migration from a local install, upgrades and removal.
-
-The source build remains available:
-
-Build and install under the default `/usr/local` prefix:
+The current release is [v1.0.0](https://github.com/AI4SciComp/asc-devtools/releases/tag/v1.0.0).
+Install the Debian package without cloning the repository or installing Go:
 
 ```bash
-CGO_ENABLED=0 go build -buildvcs=false -trimpath \
-  -ldflags "-s -w -X main.version=1.0.0" \
-  -o ./asc ./cmd/asc
-sudo ./scripts/install.sh --binary ./asc
+arch=$(dpkg --print-architecture)  # amd64 or arm64
+base=https://github.com/AI4SciComp/asc-devtools/releases/download/v1.0.0
+curl -fLO "$base/asc-devtools_1.0.0_${arch}.deb"
+curl -fLO "$base/SHA256SUMS"
+grep "  asc-devtools_1.0.0_${arch}.deb\$" SHA256SUMS | sha256sum -c -
+sudo apt install "./asc-devtools_1.0.0_${arch}.deb"
 asc --version
 ```
 
-The installer places these exact managed files:
+The package installs `/usr/bin/asc` and Bash completion. APT installs Git and
+CA certificates; CMake is optional. Download the files through the
+[release page](https://github.com/AI4SciComp/asc-devtools/releases/tag/v1.0.0)
+if `curl` is unavailable.
 
-```text
-/usr/local/bin/asc
-/usr/local/share/bash-completion/completions/asc
-/usr/local/share/asc-devtools/install-manifest
+For installation without sudo, use the binary archive. Go developers can use:
+
+```bash
+go install github.com/AI4SciComp/asc-devtools/cmd/asc@v1.0.0
 ```
 
-It refuses to overwrite a modified managed file or an unrelated installation.
-For a user-local install, use `--prefix "${HOME}/.local"` and ensure
-`~/.local/bin` is on `PATH`. See [installation](docs/installation.md).
+See [installation](docs/installation.md) for binary archives, PATH setup,
+source builds, upgrades, removal, and switching from an existing installation.
 
 ## Five-minute start
 
@@ -89,10 +85,6 @@ repositories:
 
 The umbrella itself is not initialized as a Git repository by `asc`.
 Repository discovery remains dynamic; this diagram is not an allow-list.
-`asc-os` owns generic research state as a file/CLI sidecar and does not turn
-`asc-devtools` into an agent runtime. The future neural-operator repository
-`asc-no` is planned, not implemented or cloned, and will build on released
-public APIs from `asc-py` without an `asc-os` runtime dependency.
 
 ## Configuration
 
@@ -199,20 +191,13 @@ See the [command reference](docs/commands.md) and the comprehensive
 ## Development
 
 ```bash
-gofmt -w ./cmd ./internal
-go mod tidy
-go vet ./...
-go test ./...
-go test -race ./...
-CGO_ENABLED=0 go build -trimpath -o /tmp/asc ./cmd/asc
-/tmp/asc --help
-/tmp/asc --version
-scripts/test_install.sh /tmp/asc
-git diff --check
+make check
+# Linux distribution checks (requires dpkg-deb and fakeroot):
+make package-test
 ```
 
-Go is the sole runtime implementation. Legacy implementation history and its
-disposition are recorded in the
-[Go-only migration ledger](docs/migration/go-only.md).
+See [contributing](CONTRIBUTING.md) for development requirements and
+[installation](docs/installation.md#build-and-publish-release-artifacts)
+for release packaging.
 
 Licensed under Apache-2.0. See [LICENSE](LICENSE).

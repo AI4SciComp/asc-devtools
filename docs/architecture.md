@@ -168,9 +168,17 @@ global Git configuration, locale, or mutable sibling checkouts.
 ## Distribution
 
 The runtime is the Go binary. The Bash files are narrow distribution boundaries:
-the embedded completion definition and hash-guarded install/uninstall lifecycle.
+the embedded completion definition, hash-guarded install/uninstall lifecycle,
+and release packaging and package-test scripts.
 They do not implement application business logic.
 
 The module language floor is Go 1.25. CI tests the supported Go 1.25 and 1.26
 lines and verifies that `go mod tidy` creates no `require` directive or
 `go.sum`.
+
+Release builds target Linux amd64 and arm64. `scripts/package.sh` creates
+binary archives, Debian packages and SHA-256 checksums. Debian packages install
+under `/usr` and are managed by dpkg; the standalone installer uses a hash
+manifest under the selected prefix. Package tests exercise an isolated dpkg
+lifecycle, and CI verifies installation and removal through APT. Stable version
+tags trigger the GitHub Release workflow after those checks pass.
